@@ -1,0 +1,30 @@
+[
+  {
+    "name": "di",
+    "location": {
+      "latitude": 0.5,
+      "longitude": 0.5
+    }
+  },
+  {
+    "name": "quimica",
+    "location": {
+      "latitude": 0.50065,
+      "longitude": 0.50065
+    }
+  },
+  {
+    "name": "electro",
+    "location": {
+      "latitude": 105.0,
+      "longitude": 105.0
+    }
+  },
+  {
+    "name": "cantina",
+    "location": {
+      "latitude": -105.0,
+      "longitude": -105.0
+    }
+  }
+]

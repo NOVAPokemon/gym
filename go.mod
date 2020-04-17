@@ -1,4 +1,4 @@
-module github.com/NOVAPokemon/location
+module github.com/NOVAPokemon/gym
 
 go 1.13
 

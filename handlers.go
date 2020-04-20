@@ -23,7 +23,6 @@ import (
 const DefaultGymsFile = "default_gyms.json"
 
 var (
-	ErrInConnection         = errors.New("connection Error")
 	ErrNotEnoughPokemons    = errors.New("not enough pokemons")
 	ErrTooManyPokemons      = errors.New("not enough pokemons")
 	ErrInvalidPokemonHashes = errors.New("invalid pokemon hashes")

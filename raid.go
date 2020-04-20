@@ -30,7 +30,8 @@ type RaidInternal struct {
 	startChan           chan struct{}
 }
 
-func NewRaid(raidId primitive.ObjectID, expectedCapacity int, raidBoss pokemons.Pokemon, startChan chan struct{}, client *clients.TrainersClient) *RaidInternal {
+func NewRaid(raidId primitive.ObjectID, expectedCapacity int, raidBoss pokemons.Pokemon, startChan chan struct{},
+	client *clients.TrainersClient) *RaidInternal {
 	return &RaidInternal{
 		raidBoss:            &raidBoss,
 		lobby:               ws.NewRaidLobby(raidId, expectedCapacity),
@@ -46,7 +47,8 @@ func NewRaid(raidId primitive.ObjectID, expectedCapacity int, raidBoss pokemons.
 
 }
 
-func (r *RaidInternal) AddPlayer(username string, pokemons map[string]*pokemons.Pokemon, stats *utils.TrainerStats, trainerItems map[string]items.Item, trainerConn *websocket.Conn, authToken string) {
+func (r *RaidInternal) AddPlayer(username string, pokemons map[string]*pokemons.Pokemon, stats *utils.TrainerStats,
+	trainerItems map[string]items.Item, trainerConn *websocket.Conn, authToken string) {
 	player := &battles.TrainerBattleStatus{
 		Username:        username,
 		TrainerStats:    stats,
@@ -128,7 +130,7 @@ func (r *RaidInternal) issueBossMoves() {
 				if r.playersBattleStatus[i].SelectedPokemon != nil && !r.disabledTrainers[i] {
 					change := battles.ApplyAttackMove(r.raidBoss, r.playersBattleStatus[i].SelectedPokemon, r.playersBattleStatus[i].Defending)
 					if change {
-						battles.UpdateTrainerPokemon(*r.playersBattleStatus[i].SelectedPokemon, *r.lobby.TrainerOutChannels[i], true)
+						battles.UpdateTrainerPokemon(ws.NewTrackedMessage(primitive.NewObjectID()), *r.playersBattleStatus[i].SelectedPokemon, *r.lobby.TrainerOutChannels[i], true)
 						allPokemonsDead := true
 						for _, pokemon := range r.playersBattleStatus[i].TrainerPokemons {
 							if pokemon.HP > 0 {
@@ -173,7 +175,7 @@ func (r *RaidInternal) sendMsgToAllClients(msgType string, msgArgs []string) {
 
 func (r *RaidInternal) logRaidStatus() {
 	log.Info("----------------------------------------")
-	log.Infof("Raid pokemon: pokemon:ID:%s, Damage:%d, HP:%d, maxHP:%d, Species:%s", r.raidBoss.Id.Hex(), r.raidBoss.Damage, r.raidBoss.Damage, r.raidBoss.HP, r.raidBoss.MaxHP, r.raidBoss.Species)
+	log.Infof("Raid pokemon: pokemon:ID:%s, Damage:%d, HP:%d, maxHP:%d, Species:%s", r.raidBoss.Id.Hex(), r.raidBoss.Damage, r.raidBoss.HP, r.raidBoss.MaxHP, r.raidBoss.Species)
 }
 
 func (r *RaidInternal) handlePlayerMove(msgStr *string, issuer *battles.TrainerBattleStatus, issuerChan chan *string) {
@@ -197,15 +199,17 @@ func (r *RaidInternal) handlePlayerMove(msgStr *string, issuer *battles.TrainerB
 		}
 		break
 	case battles.Defend:
-		battles.HandleDefendMove(issuer, issuerChan);
+		battles.HandleDefendMove(issuer, issuerChan)
 		break
 
 	case battles.UseItem:
-		battles.HandleUseItem(message, issuer, issuerChan)
+		useItemMsg := battles.DeserializeBattleMsg(message).(*battles.UseItemMessage)
+		battles.HandleUseItem(useItemMsg, issuer, issuerChan)
 		break
 
 	case battles.SelectPokemon:
-		battles.HandleSelectPokemon(message, issuer, issuerChan)
+		selectPokemonMsg := battles.DeserializeBattleMsg(message).(*battles.SelectPokemonMessage)
+		battles.HandleSelectPokemon(selectPokemonMsg, issuer, issuerChan)
 		break
 	default:
 		log.Errorf("cannot handle message type: %s ", message.MsgType)
@@ -241,7 +245,8 @@ func (r *RaidInternal) commitRaidResults(trainersClient *clients.TrainersClient)
 	}
 }
 
-func RemoveUsedItems(trainersClient *clients.TrainersClient, player battles.TrainerBattleStatus, authToken string, outChan chan *string) error {
+func RemoveUsedItems(trainersClient *clients.TrainersClient, player battles.TrainerBattleStatus,
+	authToken string, outChan chan *string) error {
 
 	usedItems := player.UsedItems
 
@@ -269,7 +274,8 @@ func RemoveUsedItems(trainersClient *clients.TrainersClient, player battles.Trai
 	return nil
 }
 
-func UpdateTrainerPokemons(trainersClient *clients.TrainersClient, player battles.TrainerBattleStatus, authToken string, outChan chan *string, xpAmount float64) error {
+func UpdateTrainerPokemons(trainersClient *clients.TrainersClient, player battles.TrainerBattleStatus,
+	authToken string, outChan chan *string, xpAmount float64) error {
 
 	// updates pokemon status after battle: adds XP and updates HP
 	//player 0
@@ -298,7 +304,8 @@ func UpdateTrainerPokemons(trainersClient *clients.TrainersClient, player battle
 	return nil
 }
 
-func AddExperienceToPlayer(trainersClient *clients.TrainersClient, player battles.TrainerBattleStatus, authToken string, outChan chan *string, XPAmount float64) error {
+func AddExperienceToPlayer(trainersClient *clients.TrainersClient, player battles.TrainerBattleStatus,
+	authToken string, outChan chan *string, XPAmount float64) error {
 
 	stats := player.TrainerStats
 	stats.XP += XPAmount

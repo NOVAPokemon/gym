@@ -283,7 +283,7 @@ func UpdateTrainerPokemons(trainersClient *clients.TrainersClient, player battle
 	for id, pokemon := range player.TrainerPokemons {
 		pokemon.XP += xpAmount
 		pokemon.HP = pokemon.MaxHP
-		_, err := trainersClient.UpdateTrainerPokemon(player.Username, id, *pokemon)
+		_, err := trainersClient.UpdateTrainerPokemon(player.Username, id, *pokemon, authToken)
 		if err != nil {
 			log.Errorf("An error occurred updating pokemons from user %s : %s", player.Username, err.Error())
 		}

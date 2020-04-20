@@ -41,7 +41,7 @@ type GymInternal struct {
 
 func init() {
 	httpClient = &http.Client{}
-	locationClient = clients.NewLocationClientWithLocParams(fmt.Sprintf("%s:%d", utils.Host, utils.LocationPort), utils.LocationParameters{})
+	locationClient = clients.NewLocationClient(fmt.Sprintf("%s:%d", utils.Host, utils.LocationPort), utils.LocationClientConfig{})
 	generatorClient = clients.NewGeneratorClient(fmt.Sprintf("%s:%d", utils.Host, utils.GeneratorPort))
 	gyms = loadGymsFromFile()
 }

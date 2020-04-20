@@ -128,7 +128,7 @@ func (r *RaidInternal) issueBossMoves() {
 				if r.playersBattleStatus[i].SelectedPokemon != nil && !r.disabledTrainers[i] {
 					change := battles.ApplyAttackMove(r.raidBoss, r.playersBattleStatus[i].SelectedPokemon, r.playersBattleStatus[i].Defending)
 					if change {
-						battles.UpdateTrainerPokemon(*r.playersBattleStatus[i].SelectedPokemon, *r.lobby.TrainerOutChannels[i])
+						battles.UpdateTrainerPokemon(*r.playersBattleStatus[i].SelectedPokemon, *r.lobby.TrainerOutChannels[i], true)
 						allPokemonsDead := true
 						for _, pokemon := range r.playersBattleStatus[i].TrainerPokemons {
 							if pokemon.HP > 0 {
@@ -173,7 +173,7 @@ func (r *RaidInternal) sendMsgToAllClients(msgType string, msgArgs []string) {
 
 func (r *RaidInternal) logRaidStatus() {
 	log.Info("----------------------------------------")
-	log.Infof("Raid pokemon: Species : %s ; Damage: %d; HP: %d/%d;", r.raidBoss.Species, r.raidBoss.Damage, r.raidBoss.HP, r.raidBoss.MaxHP)
+	log.Infof("Raid pokemon: pokemon:ID:%s, Damage:%d, HP:%d, maxHP:%d, Species:%s", r.raidBoss.Id.Hex(), r.raidBoss.Damage, r.raidBoss.Damage, r.raidBoss.HP, r.raidBoss.MaxHP, r.raidBoss.Species)
 }
 
 func (r *RaidInternal) handlePlayerMove(msgStr *string, issuer *battles.TrainerBattleStatus, issuerChan chan *string) {
@@ -187,7 +187,7 @@ func (r *RaidInternal) handlePlayerMove(msgStr *string, issuer *battles.TrainerB
 	switch message.MsgType {
 
 	case battles.Attack:
-		if changed, err := battles.HandleAttackMove(issuer, issuerChan, r.bossDefending, r.raidBoss); changed && err == nil {
+		if changed := battles.HandleAttackMove(issuer, issuerChan, r.bossDefending, r.raidBoss); changed {
 			if r.raidBoss.HP <= 0 {
 				// raid is finished
 				log.Info("--------------RAID ENDED---------------")
@@ -197,22 +197,15 @@ func (r *RaidInternal) handlePlayerMove(msgStr *string, issuer *battles.TrainerB
 		}
 		break
 	case battles.Defend:
-		if err = battles.HandleDefendMove(issuer, issuerChan); err != nil {
-			log.Warnf("Player %s error %s: ", issuer.Username, err)
-		}
-
+		battles.HandleDefendMove(issuer, issuerChan);
 		break
 
 	case battles.UseItem:
-		if err = battles.HandleUseItem(message, issuer, issuerChan); err != nil {
-			log.Warnf("Player %s error %s: ", issuer.Username, err)
-		}
+		battles.HandleUseItem(message, issuer, issuerChan)
 		break
 
 	case battles.SelectPokemon:
-		if err = battles.HandleSelectPokemon(msgStr, issuer, issuerChan); err != nil {
-			log.Warnf("Player %s error %s: ", issuer.Username, err)
-		}
+		battles.HandleSelectPokemon(message, issuer, issuerChan)
 		break
 	default:
 		log.Errorf("cannot handle message type: %s ", message.MsgType)
@@ -268,13 +261,11 @@ func RemoveUsedItems(trainersClient *clients.TrainersClient, player battles.Trai
 		return err
 	}
 
-	toSend := []string{tokens.ItemsTokenHeaderName, trainersClient.ItemsToken}
-	setTokensMessage := &ws.Message{
-		MsgType: battles.SetToken,
-		MsgArgs: toSend,
-	}
+	setTokensMessage := battles.SetTokenMessage{
+		TokenField:   tokens.ItemsTokenHeaderName,
+		TokensString: []string{trainersClient.ItemsToken},
+	}.SerializeToWSMessage()
 	ws.SendMessage(*setTokensMessage, outChan)
-
 	return nil
 }
 
@@ -292,18 +283,17 @@ func UpdateTrainerPokemons(trainersClient *clients.TrainersClient, player battle
 		}
 	}
 
-	toSend := make([]string, len(trainersClient.PokemonTokens)+1)
-	toSend[0] = tokens.PokemonsTokenHeaderName
-	i := 1
+	toSend := make([]string, len(trainersClient.PokemonTokens))
+	i := 0
 	for _, v := range trainersClient.PokemonTokens {
 		toSend[i] = v
 		i++
 	}
 
-	setTokensMessage := &ws.Message{
-		MsgType: battles.SetToken,
-		MsgArgs: toSend,
-	}
+	setTokensMessage := battles.SetTokenMessage{
+		TokenField:   tokens.PokemonsTokenHeaderName,
+		TokensString: toSend,
+	}.SerializeToWSMessage()
 	ws.SendMessage(*setTokensMessage, outChan)
 	return nil
 }
@@ -318,11 +308,10 @@ func AddExperienceToPlayer(trainersClient *clients.TrainersClient, player battle
 		return err
 	}
 
-	toSend := []string{tokens.StatsTokenHeaderName, trainersClient.TrainerStatsToken}
-	setTokensMessage := &ws.Message{
-		MsgType: battles.SetToken,
-		MsgArgs: toSend,
-	}
+	setTokensMessage := battles.SetTokenMessage{
+		TokenField:   tokens.StatsTokenHeaderName,
+		TokensString: []string{trainersClient.TrainerStatsToken},
+	}.SerializeToWSMessage()
 	ws.SendMessage(*setTokensMessage, outChan)
 	return nil
 }

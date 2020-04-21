@@ -10,27 +10,33 @@ import (
 	"github.com/NOVAPokemon/utils/items"
 	"github.com/NOVAPokemon/utils/pokemons"
 	"github.com/NOVAPokemon/utils/tokens"
-	"github.com/NOVAPokemon/utils/websockets/battles"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 	log "github.com/sirupsen/logrus"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"io/ioutil"
+	"math/rand"
 	"net/http"
 	"time"
 )
 
 const DefaultGymsFile = "default_gyms.json"
+const configFilename = "configs.json"
+
+// Pokemons taken from https://raw.githubusercontent.com/sindresorhus/pokemon/master/data/en.json
+const PokemonsFile = "pokemons.json"
 
 var (
 	ErrNotEnoughPokemons    = errors.New("not enough pokemons")
 	ErrTooManyPokemons      = errors.New("not enough pokemons")
 	ErrInvalidPokemonHashes = errors.New("invalid pokemon hashes")
+
+	config         = loadConfig()
+	pokemonSpecies = loadPokemonSpecies()
 )
 
 var httpClient *http.Client
 var locationClient *clients.LocationClient
-var generatorClient *clients.GeneratorClient
 var gyms map[string]*GymInternal
 
 type GymInternal struct {
@@ -39,10 +45,29 @@ type GymInternal struct {
 }
 
 func init() {
+
 	httpClient = &http.Client{}
 	locationClient = clients.NewLocationClient(fmt.Sprintf("%s:%d", utils.Host, utils.LocationPort), utils.LocationClientConfig{})
-	generatorClient = clients.NewGeneratorClient(fmt.Sprintf("%s:%d", utils.Host, utils.GeneratorPort))
 	gyms = loadGymsFromFile()
+}
+
+func loadConfig() *GymServerConfig {
+	fileData, err := ioutil.ReadFile(configFilename)
+	if err != nil {
+		log.Panic(err)
+		return nil
+	}
+
+	var config GymServerConfig
+	err = json.Unmarshal(fileData, &config)
+	if err != nil {
+		log.Panic(err)
+		return nil
+	}
+
+	log.Infof("Loaded config: %+v", config)
+
+	return &config
 }
 
 func handleCreateGym(w http.ResponseWriter, r *http.Request) {
@@ -93,7 +118,15 @@ func handleCreateRaid(w http.ResponseWriter, r *http.Request) {
 
 	startChan := make(chan struct{})
 	trainersClient := clients.NewTrainersClient(fmt.Sprintf("%s:%d", utils.Host, utils.TrainersPort), httpClient)
-	gymInternal.raid = NewRaid(primitive.NewObjectID(), battles.DefaultRaidCapacity, *gymInternal.Gym.RaidBoss, startChan, trainersClient)
+	gymInternal.raid = NewRaid(
+		primitive.NewObjectID(),
+		config.PokemonsPerRaid,
+		*gymInternal.Gym.RaidBoss,
+		startChan,
+		trainersClient,
+		config.DefaultCooldown,
+		config.TimeToStartRaid)
+
 	gymInternal.Gym.RaidForming = true
 	go handleRaidStart(gymInternal, startChan)
 	go gymInternal.raid.Start()
@@ -191,12 +224,8 @@ func handleGetGymInfo(w http.ResponseWriter, r *http.Request) {
 }
 
 func refreshRaidBossPeriodic(gymInternal *GymInternal) {
-	if newRaidBoss, err := generatorClient.GetRaidBoss(); err == nil {
-		log.Infof("New raidBoss for gym %s %v: ", gymInternal.Gym.Name, newRaidBoss)
-		gymInternal.Gym.RaidBoss = newRaidBoss
-	} else {
-		log.Error("An error occurred fetching new raid boss: ", err)
-	}
+	gymInternal.Gym.RaidBoss = pokemons.GenerateRaidBoss(config.MaxLevel, config.StdHpDeviation, config.MaxHP, config.StdDamageDeviation, config.MaxDamage, pokemonSpecies[rand.Intn(len(pokemonSpecies))-1])
+	log.Infof("New raidBoss for gym %s %v: ", gymInternal.Gym.Name, gymInternal.Gym.RaidBoss)
 
 	ticker := time.NewTicker(15 * time.Minute)
 	defer ticker.Stop()
@@ -204,12 +233,8 @@ func refreshRaidBossPeriodic(gymInternal *GymInternal) {
 		select {
 		case <-ticker.C:
 			log.Info("Refreshing boss...")
-			if newRaidBoss, err := generatorClient.GetRaidBoss(); err == nil {
-				log.Infof("New raidBoss for gym %s %v: ", gymInternal.Gym.Name, newRaidBoss)
-				gymInternal.Gym.RaidBoss = newRaidBoss
-			} else {
-				log.Error("An error occurred fetching new raid boss: ", err)
-			}
+			gymInternal.Gym.RaidBoss = pokemons.GenerateRaidBoss(config.MaxLevel, config.StdHpDeviation, config.MaxHP, config.StdDamageDeviation, config.MaxDamage, pokemonSpecies[rand.Intn(len(pokemonSpecies))-1])
+			log.Infof("New raidBoss for gym %s %v: ", gymInternal.Gym.Name, gymInternal.Gym.RaidBoss)
 		}
 	}
 }
@@ -225,12 +250,12 @@ func extractAndVerifyTokensForBattle(trainersClient *clients.TrainersClient, use
 		return nil, nil, nil, err
 	}
 
-	if len(pokemonTkns) > battles.PokemonsPerRaid {
+	if len(pokemonTkns) > config.PokemonsPerRaid {
 		log.Error(ErrTooManyPokemons)
 		return nil, nil, nil, ErrTooManyPokemons
 	}
 
-	if len(pokemonTkns) < battles.PokemonsPerRaid {
+	if len(pokemonTkns) < config.PokemonsPerRaid {
 		log.Error(ErrNotEnoughPokemons)
 		return nil, nil, nil, ErrNotEnoughPokemons
 	}
@@ -320,4 +345,24 @@ func loadGymsFromFile() map[string]*GymInternal {
 
 	log.Infof("Loaded %d gyms.", len(gymsMap))
 	return gymsMap
+}
+
+func loadPokemonSpecies() []string {
+	data, err := ioutil.ReadFile(PokemonsFile)
+	if err != nil {
+		log.Fatal("Error loading pokemons file")
+		return nil
+	}
+
+	var pokemonNames []string
+	err = json.Unmarshal(data, &pokemonNames)
+
+	if err != nil {
+		log.Errorf("Error unmarshalling pokemons name")
+		log.Fatal(err)
+	}
+
+	log.Infof("Loaded %d pokemon species.", len(pokemonNames))
+
+	return pokemonNames
 }

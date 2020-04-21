@@ -1,0 +1,10 @@
+{
+  "DefaultCooldown": 500,
+  "TimeToStartRaid": 10000,
+  "PokemonsPerRaid": 3,
+  "max_level": 100.0,
+  "max_hp": 500.0,
+  "max_damage": 500.0,
+  "StdHpDeviation": 25.0,
+  "StdDamageDeviation": 25.0
+}

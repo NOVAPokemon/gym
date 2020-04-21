@@ -28,10 +28,12 @@ type RaidInternal struct {
 	finished            bool
 	bossDefending       bool
 	startChan           chan struct{}
+	cooldown            time.Duration
+	waitTime            time.Duration
 }
 
 func NewRaid(raidId primitive.ObjectID, expectedCapacity int, raidBoss pokemons.Pokemon, startChan chan struct{},
-	client *clients.TrainersClient) *RaidInternal {
+	client *clients.TrainersClient, cooldownMilis int, waitTimeMilis int) *RaidInternal {
 	return &RaidInternal{
 		raidBoss:            &raidBoss,
 		lobby:               ws.NewRaidLobby(raidId, expectedCapacity),
@@ -43,6 +45,8 @@ func NewRaid(raidId primitive.ObjectID, expectedCapacity int, raidBoss pokemons.
 		startChan:           startChan,
 		bossDefending:       false,
 		trainersClient:      client,
+		cooldown:            time.Duration(cooldownMilis) * time.Millisecond,
+		waitTime:            time.Duration(waitTimeMilis) * time.Millisecond,
 	}
 
 }
@@ -56,7 +60,7 @@ func (r *RaidInternal) AddPlayer(username string, pokemons map[string]*pokemons.
 		TrainerItems:    trainerItems,
 		AllPokemonsDead: false,
 		UsedItems:       make(map[string]items.Item),
-		CdTimer:         time.NewTimer(battles.DefaultCooldown),
+		CdTimer:         time.NewTimer(r.cooldown),
 	}
 	log.Warn("Added player to raid")
 	r.disabledTrainers = append(r.disabledTrainers, false)
@@ -67,7 +71,7 @@ func (r *RaidInternal) AddPlayer(username string, pokemons map[string]*pokemons.
 }
 
 func (r *RaidInternal) Start() {
-	startTimer := time.NewTimer(battles.TimeToStartRaid)
+	startTimer := time.NewTimer(r.waitTime)
 	<-startTimer.C
 	r.started = true
 	close(r.startChan)
@@ -189,7 +193,7 @@ func (r *RaidInternal) handlePlayerMove(msgStr *string, issuer *battles.TrainerB
 	switch message.MsgType {
 
 	case battles.Attack:
-		if changed := battles.HandleAttackMove(issuer, issuerChan, r.bossDefending, r.raidBoss); changed {
+		if changed := battles.HandleAttackMove(issuer, issuerChan, r.bossDefending, r.raidBoss, r.cooldown); changed {
 			if r.raidBoss.HP <= 0 {
 				// raid is finished
 				log.Info("--------------RAID ENDED---------------")
@@ -199,12 +203,12 @@ func (r *RaidInternal) handlePlayerMove(msgStr *string, issuer *battles.TrainerB
 		}
 		break
 	case battles.Defend:
-		battles.HandleDefendMove(issuer, issuerChan)
+		battles.HandleDefendMove(issuer, issuerChan, r.cooldown)
 		break
 
 	case battles.UseItem:
 		useItemMsg := battles.DeserializeBattleMsg(message).(*battles.UseItemMessage)
-		battles.HandleUseItem(useItemMsg, issuer, issuerChan)
+		battles.HandleUseItem(useItemMsg, issuer, issuerChan, r.cooldown)
 		break
 
 	case battles.SelectPokemon:

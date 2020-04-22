@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"github.com/NOVAPokemon/utils"
 	"github.com/NOVAPokemon/utils/api"
 	"github.com/NOVAPokemon/utils/clients"
@@ -47,7 +46,7 @@ type GymInternal struct {
 func init() {
 
 	httpClient = &http.Client{}
-	locationClient = clients.NewLocationClient(fmt.Sprintf("%s:%d", utils.Host, utils.LocationPort), utils.LocationClientConfig{})
+	locationClient = clients.NewLocationClient(utils.LocationClientConfig{})
 	gyms = loadGymsFromFile()
 }
 
@@ -117,7 +116,7 @@ func handleCreateRaid(w http.ResponseWriter, r *http.Request) {
 	}
 
 	startChan := make(chan struct{})
-	trainersClient := clients.NewTrainersClient(fmt.Sprintf("%s:%d", utils.Host, utils.TrainersPort), httpClient)
+	trainersClient := clients.NewTrainersClient(httpClient)
 	gymInternal.raid = NewRaid(
 		primitive.NewObjectID(),
 		config.PokemonsPerRaid,
@@ -162,7 +161,7 @@ func handleJoinRaid(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	trainersClient := clients.NewTrainersClient(fmt.Sprintf("%s:%d", utils.Host, utils.TrainersPort), httpClient)
+	trainersClient := clients.NewTrainersClient(httpClient)
 	trainerItems, statsToken, pokemonsForBattle, err := extractAndVerifyTokensForBattle(trainersClient, authToken.Username, r)
 	if err != nil {
 		if err := conn.WriteMessage(websocket.TextMessage, []byte(err.Error())); err != nil {

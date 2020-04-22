@@ -44,7 +44,6 @@ type GymInternal struct {
 }
 
 func init() {
-
 	httpClient = &http.Client{}
 	locationClient = clients.NewLocationClient(utils.LocationClientConfig{})
 	gyms = loadGymsFromFile()

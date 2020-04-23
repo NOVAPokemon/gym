@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/NOVAPokemon/utils"
 	"github.com/NOVAPokemon/utils/api"
 	"github.com/NOVAPokemon/utils/clients"
@@ -321,6 +322,12 @@ func loadGymsFromFile() map[string]*GymInternal {
 
 	var gymsArr []*utils.Gym
 	err = json.Unmarshal(data, &gymsArr)
+
+	if err != nil {
+		log.Error(err)
+		log.Panic(err)
+	}
+
 	var gymsMap = make(map[string]*GymInternal, len(gymsArr))
 	for _, gym := range gymsArr {
 		newGymInternal := &GymInternal{

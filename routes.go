@@ -14,6 +14,7 @@ const GET = "GET"
 const POST = "POST"
 
 var routes = utils.Routes{
+	api.DefaultRoute,
 	utils.Route{
 		Name:        CreateRaidName,
 		Method:      POST,

@@ -9,4 +9,7 @@ COPY configs.json .
 COPY default_gyms.json .
 COPY pokemons.json .
 
-ENTRYPOINT ./$executable
+COPY dockerize .
+RUN chmod +x dockerize
+
+CMD ["$executable"]

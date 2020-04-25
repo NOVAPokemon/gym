@@ -16,15 +16,15 @@
   {
     "name": "electro",
     "location": {
-      "latitude": 105.0,
-      "longitude": 105.0
+      "latitude": 10.0,
+      "longitude": 10.0
     }
   },
   {
     "name": "cantina",
     "location": {
-      "latitude": -105.0,
-      "longitude": -105.0
+      "latitude": -10.0,
+      "longitude": -10.0
     }
   }
 ]

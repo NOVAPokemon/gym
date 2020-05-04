@@ -197,7 +197,8 @@ func handleJoinRaid(w http.ResponseWriter, r *http.Request) {
 	}
 
 	trainersClient := clients.NewTrainersClient(httpClient)
-	trainerItems, statsToken, pokemonsForBattle, err := extractAndVerifyTokensForBattle(trainersClient, authToken.Username, r)
+	trainerItems, statsToken, pokemonsForBattle, err := extractAndVerifyTokensForBattle(trainersClient,
+		authToken.Username, r)
 	if err != nil {
 		log.Error(wrapJoinRaidError(err))
 

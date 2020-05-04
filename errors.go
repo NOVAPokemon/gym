@@ -7,8 +7,8 @@ import (
 )
 
 const (
-	errorLoadGyms                  = "error loading gyms"
-	errorLoadSpecies               = "error loading pokemon species"
+	errorLoadGyms     = "error loading gyms"
+	errorLoadSpecies  = "error loading pokemon species"
 	errorTokensBattle = " error extracting and verifying tokens for battle"
 
 	errorGymNoRaidBossFormat      = "gym %s has no raid boss"
@@ -20,8 +20,8 @@ const (
 )
 
 var (
-	ErrorNotEnoughPokemons    = errors.New("not enough pokemons")
-	ErrorTooManyPokemons      = errors.New("not enough pokemons")
+	ErrorNotEnoughPokemons = errors.New("not enough pokemons")
+	ErrorTooManyPokemons   = errors.New("not enough pokemons")
 )
 
 // Wrappers handlers

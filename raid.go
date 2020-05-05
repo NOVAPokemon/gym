@@ -186,7 +186,7 @@ func (r *RaidInternal) handlePlayerMove(msgStr *string, issuer *battles.TrainerB
 
 	message, err := ws.ParseMessage(msgStr)
 	if err != nil {
-		errMsg := ws.Message{MsgType: battles.Error, MsgArgs: []string{battles.ErrInvalidMessageFormat.Error()}}
+		errMsg := ws.Message{MsgType: battles.Error, MsgArgs: []string{ws.ErrorInvalidMessageFormat.Error()}}
 		ws.SendMessage(errMsg, issuerChan)
 		return
 	}
@@ -217,7 +217,7 @@ func (r *RaidInternal) handlePlayerMove(msgStr *string, issuer *battles.TrainerB
 		break
 	default:
 		log.Errorf("cannot handle message type: %s ", message.MsgType)
-		msg := ws.Message{MsgType: battles.Error, MsgArgs: []string{fmt.Sprintf(battles.ErrInvalidMessageType.Error())}}
+		msg := ws.Message{MsgType: battles.Error, MsgArgs: []string{fmt.Sprintf(ws.ErrorInvalidMessageType.Error())}}
 		ws.SendMessage(msg, issuerChan)
 		return
 	}

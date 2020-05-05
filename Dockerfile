@@ -1,4 +1,4 @@
-FROM nova-server-base:latest
+FROM novapokemon/nova-server-base:latest
 
 ENV executable="executable"
 COPY $executable .

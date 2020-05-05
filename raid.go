@@ -264,7 +264,7 @@ func RemoveUsedItems(trainersClient *clients.TrainersClient, player battles.Trai
 		itemIds = append(itemIds, itemId)
 	}
 
-	_, err := trainersClient.RemoveItemsFromBag(player.Username, itemIds, authToken)
+	_, err := trainersClient.RemoveItems(player.Username, itemIds, authToken)
 
 	if err != nil {
 		return err

@@ -319,7 +319,7 @@ func extractAndVerifyTokensForBattle(trainersClient *clients.TrainersClient, use
 	}
 
 	if !*valid {
-		return nil, nil, nil, wrapTokensForBattleError(tokens.ErrorPokemonTokens)
+		return nil, nil, nil, wrapTokensForBattleError(tokens.ErrorInvalidPokemonTokens)
 	}
 
 	// stats
@@ -335,7 +335,7 @@ func extractAndVerifyTokensForBattle(trainersClient *clients.TrainersClient, use
 	}
 
 	if !*valid {
-		return nil, nil, nil, wrapTokensForBattleError(tokens.ErrorStatsToken)
+		return nil, nil, nil, wrapTokensForBattleError(tokens.ErrorInvalidStatsToken)
 	}
 
 	// items
@@ -351,7 +351,7 @@ func extractAndVerifyTokensForBattle(trainersClient *clients.TrainersClient, use
 	}
 
 	if !*valid {
-		return nil, nil, nil, wrapTokensForBattleError(tokens.ErrorItemsToken)
+		return nil, nil, nil, wrapTokensForBattleError(tokens.ErrorInvalidItemsToken)
 	}
 
 	return itemsToken.Items, &trainerStatsToken.TrainerStats, pokemonsInToken, nil

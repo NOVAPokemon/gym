@@ -25,8 +25,6 @@ const configFilename = "configs.json"
 // Pokemons taken from https://raw.githubusercontent.com/sindresorhus/pokemon/master/data/en.json
 const PokemonsFile = "pokemons.json"
 
-var ()
-
 var (
 	httpClient     *http.Client
 	locationClient *clients.LocationClient

@@ -76,7 +76,7 @@ func (r *RaidInternal) Start() {
 	r.started = true
 	close(r.startChan)
 	log.Info("Sending Start message")
-	r.sendMsgToAllClients(battles.Start, []string{})
+	r.sendMsgToAllClients(ws.Start, []string{})
 	r.issueBossMoves()
 }
 
@@ -114,7 +114,7 @@ func (r *RaidInternal) finish(success bool) {
 		r.lobby.Close()
 		return
 	}
-	r.sendMsgToAllClients(battles.Finish, []string{})
+	r.sendMsgToAllClients(ws.Finish, []string{})
 	for i := 0; i < r.lobby.TrainersJoined; i++ {
 		<-r.lobby.EndConnectionChannels[i]
 	}
@@ -183,15 +183,14 @@ func (r *RaidInternal) logRaidStatus() {
 }
 
 func (r *RaidInternal) handlePlayerMove(msgStr *string, issuer *battles.TrainerBattleStatus, issuerChan chan *string) {
-
 	message, err := ws.ParseMessage(msgStr)
 	if err != nil {
-		errMsg := ws.Message{MsgType: battles.Error, MsgArgs: []string{ws.ErrorInvalidMessageFormat.Error()}}
+		errMsg := ws.Message{MsgType: ws.Error, MsgArgs: []string{ws.ErrorInvalidMessageFormat.Error()}}
 		ws.SendMessage(errMsg, issuerChan)
 		return
 	}
-	switch message.MsgType {
 
+	switch message.MsgType {
 	case battles.Attack:
 		if changed := battles.HandleAttackMove(issuer, issuerChan, r.bossDefending, r.raidBoss, r.cooldown); changed {
 			if r.raidBoss.HP <= 0 {
@@ -201,25 +200,30 @@ func (r *RaidInternal) handlePlayerMove(msgStr *string, issuer *battles.TrainerB
 				r.finish(true)
 			}
 		}
-		break
 	case battles.Defend:
 		battles.HandleDefendMove(issuer, issuerChan, r.cooldown)
-		break
-
 	case battles.UseItem:
-		useItemMsg := battles.DeserializeBattleMsg(message).(*battles.UseItemMessage)
-		battles.HandleUseItem(useItemMsg, issuer, issuerChan, r.cooldown)
-		break
+		desMsg, err := battles.DeserializeBattleMsg(message)
+		if err != nil {
+			log.Error(err)
+			return
+		}
 
+		useItemMsg := desMsg.(*battles.UseItemMessage)
+		battles.HandleUseItem(useItemMsg, issuer, issuerChan, r.cooldown)
 	case battles.SelectPokemon:
-		selectPokemonMsg := battles.DeserializeBattleMsg(message).(*battles.SelectPokemonMessage)
+		desMsg, err := battles.DeserializeBattleMsg(message)
+		if err != nil {
+			log.Error(err)
+			return
+		}
+
+		selectPokemonMsg := desMsg.(*battles.SelectPokemonMessage)
 		battles.HandleSelectPokemon(selectPokemonMsg, issuer, issuerChan)
-		break
 	default:
 		log.Errorf("cannot handle message type: %s ", message.MsgType)
-		msg := ws.Message{MsgType: battles.Error, MsgArgs: []string{fmt.Sprintf(ws.ErrorInvalidMessageType.Error())}}
+		msg := ws.Message{MsgType: ws.Error, MsgArgs: []string{fmt.Sprintf(ws.ErrorInvalidMessageType.Error())}}
 		ws.SendMessage(msg, issuerChan)
-		return
 	}
 }
 
@@ -265,12 +269,11 @@ func RemoveUsedItems(trainersClient *clients.TrainersClient, player battles.Trai
 	}
 
 	_, err := trainersClient.RemoveItems(player.Username, itemIds, authToken)
-
 	if err != nil {
 		return err
 	}
 
-	setTokensMessage := battles.SetTokenMessage{
+	setTokensMessage := ws.SetTokenMessage{
 		TokenField:   tokens.ItemsTokenHeaderName,
 		TokensString: []string{trainersClient.ItemsToken},
 	}.SerializeToWSMessage()
@@ -300,7 +303,7 @@ func UpdateTrainerPokemons(trainersClient *clients.TrainersClient, player battle
 		i++
 	}
 
-	setTokensMessage := battles.SetTokenMessage{
+	setTokensMessage := ws.SetTokenMessage{
 		TokenField:   tokens.PokemonsTokenHeaderName,
 		TokensString: toSend,
 	}.SerializeToWSMessage()
@@ -319,7 +322,7 @@ func AddExperienceToPlayer(trainersClient *clients.TrainersClient, player battle
 		return err
 	}
 
-	setTokensMessage := battles.SetTokenMessage{
+	setTokensMessage := ws.SetTokenMessage{
 		TokenField:   tokens.StatsTokenHeaderName,
 		TokensString: []string{trainersClient.TrainerStatsToken},
 	}.SerializeToWSMessage()

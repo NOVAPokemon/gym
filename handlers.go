@@ -50,14 +50,13 @@ func init() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	httpClient = &http.Client{}
+	locationClient = clients.NewLocationClient(utils.LocationClientConfig{})
 
 	gyms, err = loadGymsFromFile()
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	httpClient = &http.Client{}
-	locationClient = clients.NewLocationClient(utils.LocationClientConfig{})
 }
 
 func loadConfig() (*GymServerConfig, error) {
@@ -328,7 +327,7 @@ func extractAndVerifyTokensForBattle(trainersClient *clients.TrainersClient, use
 
 	valid, err = trainersClient.VerifyTrainerStats(username, trainerStatsToken.TrainerHash,
 		r.Header.Get(tokens.AuthTokenHeaderName))
-	if err != nil  {
+	if err != nil {
 		return nil, nil, nil, wrapTokensForBattleError(err)
 	}
 
@@ -344,7 +343,7 @@ func extractAndVerifyTokensForBattle(trainersClient *clients.TrainersClient, use
 	}
 
 	valid, err = trainersClient.VerifyItems(username, itemsToken.ItemsHash, r.Header.Get(tokens.AuthTokenHeaderName))
-	if err != nil  {
+	if err != nil {
 		return nil, nil, nil, wrapTokensForBattleError(err)
 	}
 
@@ -375,15 +374,13 @@ func loadGymsFromFile() (map[string]*GymInternal, error) {
 		}
 		gymsMap[gym.Name] = newGymInternal
 		go refreshRaidBossPeriodic(newGymInternal)
-
 		err = locationClient.AddGymLocation(*gym)
 		if err != nil {
-			return nil, wrapLoadGymsError(err)
+			log.Error(wrapLoadGymsError(err))
 		}
 	}
 
 	log.Infof("Loaded %d gyms.", len(gymsMap))
-
 	return gymsMap, nil
 }
 

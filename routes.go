@@ -3,6 +3,7 @@ package main
 import (
 	"github.com/NOVAPokemon/utils"
 	"github.com/NOVAPokemon/utils/api"
+	"strings"
 )
 
 const CreateRaidName = "CREATE_RAID"
@@ -14,7 +15,7 @@ const GET = "GET"
 const POST = "POST"
 
 var routes = utils.Routes{
-	api.DefaultRoute,
+	api.GenStatusRoute(strings.ToLower(serviceName)),
 	utils.Route{
 		Name:        CreateRaidName,
 		Method:      POST,

@@ -172,7 +172,10 @@ func (r *RaidInternal) sendMsgToAllClients(msgType string, msgArgs []string) {
 	toSend := ws.Message{MsgType: msgType, MsgArgs: msgArgs}
 	for i := 0; i < r.lobby.TrainersJoined; i++ {
 		if !r.disabledTrainers[i] {
-			ws.SendMessage(toSend, *r.lobby.TrainerOutChannels[i])
+			*r.lobby.TrainerOutChannels[i] <- ws.GenericMsg{
+				MsgType: websocket.TextMessage,
+				Data:    []byte(toSend.Serialize()),
+			}
 		}
 	}
 }
@@ -182,11 +185,14 @@ func (r *RaidInternal) logRaidStatus() {
 	log.Infof("Raid pokemon: pokemon:ID:%s, Damage:%d, HP:%d, maxHP:%d, Species:%s", r.raidBoss.Id.Hex(), r.raidBoss.Damage, r.raidBoss.HP, r.raidBoss.MaxHP, r.raidBoss.Species)
 }
 
-func (r *RaidInternal) handlePlayerMove(msgStr *string, issuer *battles.TrainerBattleStatus, issuerChan chan *string) {
+func (r *RaidInternal) handlePlayerMove(msgStr *string, issuer *battles.TrainerBattleStatus, issuerChan chan ws.GenericMsg) {
 	message, err := ws.ParseMessage(msgStr)
 	if err != nil {
 		errMsg := ws.Message{MsgType: ws.Error, MsgArgs: []string{ws.ErrorInvalidMessageFormat.Error()}}
-		ws.SendMessage(errMsg, issuerChan)
+		issuerChan <- ws.GenericMsg{
+			MsgType: websocket.TextMessage,
+			Data:    []byte(errMsg.Serialize()),
+		}
 		return
 	}
 
@@ -223,7 +229,10 @@ func (r *RaidInternal) handlePlayerMove(msgStr *string, issuer *battles.TrainerB
 	default:
 		log.Errorf("cannot handle message type: %s ", message.MsgType)
 		msg := ws.Message{MsgType: ws.Error, MsgArgs: []string{fmt.Sprintf(ws.ErrorInvalidMessageType.Error())}}
-		ws.SendMessage(msg, issuerChan)
+		issuerChan <- ws.GenericMsg{
+			MsgType: websocket.TextMessage,
+			Data:    []byte(msg.Serialize()),
+		}
 	}
 }
 
@@ -254,7 +263,7 @@ func (r *RaidInternal) commitRaidResults(trainersClient *clients.TrainersClient)
 }
 
 func RemoveUsedItems(trainersClient *clients.TrainersClient, player battles.TrainerBattleStatus,
-	authToken string, outChan chan *string) error {
+	authToken string, outChan chan ws.GenericMsg) error {
 
 	usedItems := player.UsedItems
 
@@ -277,12 +286,15 @@ func RemoveUsedItems(trainersClient *clients.TrainersClient, player battles.Trai
 		TokenField:   tokens.ItemsTokenHeaderName,
 		TokensString: []string{trainersClient.ItemsToken},
 	}.SerializeToWSMessage()
-	ws.SendMessage(*setTokensMessage, outChan)
+	outChan <- ws.GenericMsg{
+		MsgType: websocket.TextMessage,
+		Data:    []byte(setTokensMessage.Serialize()),
+	}
 	return nil
 }
 
 func UpdateTrainerPokemons(trainersClient *clients.TrainersClient, player battles.TrainerBattleStatus,
-	authToken string, outChan chan *string, xpAmount float64) error {
+	authToken string, outChan chan ws.GenericMsg, xpAmount float64) error {
 
 	// updates pokemon status after battle: adds XP and updates HP
 	//player 0
@@ -307,12 +319,15 @@ func UpdateTrainerPokemons(trainersClient *clients.TrainersClient, player battle
 		TokenField:   tokens.PokemonsTokenHeaderName,
 		TokensString: toSend,
 	}.SerializeToWSMessage()
-	ws.SendMessage(*setTokensMessage, outChan)
+	outChan <- ws.GenericMsg{
+		MsgType: websocket.TextMessage,
+		Data:    []byte(setTokensMessage.Serialize()),
+	}
 	return nil
 }
 
 func AddExperienceToPlayer(trainersClient *clients.TrainersClient, player battles.TrainerBattleStatus,
-	authToken string, outChan chan *string, XPAmount float64) error {
+	authToken string, outChan chan ws.GenericMsg, XPAmount float64) error {
 
 	stats := player.TrainerStats
 	stats.XP += XPAmount
@@ -326,6 +341,9 @@ func AddExperienceToPlayer(trainersClient *clients.TrainersClient, player battle
 		TokenField:   tokens.StatsTokenHeaderName,
 		TokensString: []string{trainersClient.TrainerStatsToken},
 	}.SerializeToWSMessage()
-	ws.SendMessage(*setTokensMessage, outChan)
+	outChan <- ws.GenericMsg{
+		MsgType: websocket.TextMessage,
+		Data:    []byte(setTokensMessage.Serialize()),
+	}
 	return nil
 }

@@ -1,0 +1,16 @@
+[
+  {
+    "name": "server2-gym1",
+    "location": {
+      "latitude": 0.5,
+      "longitude": 0.5
+    }
+  },
+  {
+    "name": "server2-gym2",
+    "location": {
+      "latitude": 0.5,
+      "longitude": 0.5
+    }
+  }
+]

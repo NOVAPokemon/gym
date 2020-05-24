@@ -2,9 +2,11 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/NOVAPokemon/utils"
 	"github.com/NOVAPokemon/utils/api"
 	"github.com/NOVAPokemon/utils/clients"
+	gymDb "github.com/NOVAPokemon/utils/database/gym"
 	"github.com/NOVAPokemon/utils/items"
 	"github.com/NOVAPokemon/utils/pokemons"
 	"github.com/NOVAPokemon/utils/tokens"
@@ -16,16 +18,19 @@ import (
 	"io/ioutil"
 	"math/rand"
 	"net/http"
+	"os"
+	"strconv"
+	"strings"
 	"time"
 )
 
 const (
-	DefaultGymsFile = "default_gyms.json"
-	configFilename  = "configs.json"
+	GymConfigsFolder = "gymConfigs"
 )
 
 // Pokemons taken from https://raw.githubusercontent.com/sindresorhus/pokemon/master/data/en.json
 const PokemonsFile = "pokemons.json"
+const configFilename = "configs.json"
 
 var (
 	httpClient     *http.Client
@@ -33,6 +38,8 @@ var (
 	gyms           map[string]*GymInternal
 	pokemonSpecies []string
 	config         *GymServerConfig
+	serverName     string
+	serverNr       int64
 )
 
 type GymInternal struct {
@@ -42,23 +49,47 @@ type GymInternal struct {
 
 func init() {
 	var err error
-
-	config, err = loadConfig()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	pokemonSpecies, err = loadPokemonSpecies()
-	if err != nil {
-		log.Fatal(err)
-	}
 	httpClient = &http.Client{}
 	locationClient = clients.NewLocationClient(utils.LocationClientConfig{})
-
-	gyms, err = loadGymsFromFile()
-	if err != nil {
+	if pokemonSpecies, err = loadPokemonSpecies(); err != nil {
 		log.Fatal(err)
 	}
+	if config, err = loadConfig(); err != nil {
+		log.Fatal(err)
+	}
+
+	if aux, exists := os.LookupEnv(utils.HostnameEnvVar); exists {
+		serverName = aux
+	} else {
+		log.Fatal("Could not load server name")
+	}
+	split := strings.Split(serverName, "-")
+	if serverNr, err = strconv.ParseInt(split[len(split)-1], 10, 32); err != nil {
+		log.Fatal(err)
+	}
+	log.Infof("Server name :%s; ServerNr: %d", serverName, serverNr)
+
+	for i := 0; i < 3; i++ {
+		gyms, err = loadGymsFromDb(serverName)
+		if err != nil {
+			log.Error(err)
+			if serverNr == 0 {
+				// if configs are missing, server 0 adds them
+				err := loadGymsToDb()
+				if err != nil {
+					log.Error(WrapInit(err))
+				}
+			}
+		} else {
+			break
+		}
+		time.Sleep(time.Duration(5*i) * time.Second)
+	}
+
+	if gyms == nil {
+		panic("Could not load gyms")
+	}
+
 }
 
 func loadConfig() (*GymServerConfig, error) {
@@ -76,6 +107,66 @@ func loadConfig() (*GymServerConfig, error) {
 	log.Infof("Loaded config: %+v", config)
 
 	return &config, nil
+}
+
+func loadGymsToDb() error {
+	files, err := ioutil.ReadDir(GymConfigsFolder)
+
+	if err != nil {
+		return wrapLoadGymsToDBError(err)
+	}
+
+	for _, file := range files {
+		if !strings.Contains(file.Name(), ".json") {
+			continue
+		}
+		log.Infof("Doing file: %s", file.Name())
+		fileData, err := ioutil.ReadFile(fmt.Sprintf("%s/%s", GymConfigsFolder, file.Name()))
+		if err != nil {
+			return wrapLoadGymsToDBError(err)
+		}
+
+		var gyms []utils.Gym
+		if err = json.Unmarshal(fileData, &gyms); err != nil {
+			return wrapLoadGymsToDBError(err)
+		}
+
+		serverName := strings.TrimSuffix(file.Name(), ".json")
+		gymsForServer := utils.GymsForServer{
+			Gyms:       gyms,
+			ServerName: serverName,
+		}
+
+		log.Infof("Loaded gyms for server %s", serverName)
+		if err = gymDb.UpsertGymsForServer(serverName, gymsForServer); err != nil {
+			return wrapLoadGymsToDBError(err)
+		}
+	}
+	return nil
+}
+
+func loadGymsFromDb(serverName string) (map[string]*GymInternal, error) {
+	gymsCfg, err := gymDb.GetGymsForServer(serverName)
+	if err != nil {
+		return nil, wrapLoadGymsFromDBError(err)
+	}
+	var gymsMap = make(map[string]*GymInternal, len(gymsCfg.Gyms))
+	for _, gym := range gymsCfg.Gyms {
+		log.Infof("Registering gym %s with location server", gym.Name)
+		newGymInternal := &GymInternal{
+			Gym:  &gym,
+			raid: nil,
+		}
+		gymsMap[gym.Name] = newGymInternal
+		go refreshRaidBossPeriodic(newGymInternal)
+		err = locationClient.AddGymLocation(gym)
+		if err != nil {
+			log.Error(wrapLoadGymsFromDBError(err))
+		}
+	}
+
+	log.Infof("Loaded %d gyms.", len(gymsMap))
+	return gymsMap, nil
 }
 
 func handleCreateGym(w http.ResponseWriter, r *http.Request) {
@@ -274,6 +365,7 @@ func handleGetGymInfo(w http.ResponseWriter, r *http.Request) {
 func refreshRaidBossPeriodic(gymInternal *GymInternal) {
 	gymInternal.Gym.RaidBoss = pokemons.GenerateRaidBoss(config.MaxLevel, config.StdHpDeviation, config.MaxHP,
 		config.StdDamageDeviation, config.MaxDamage, pokemonSpecies[rand.Intn(len(pokemonSpecies))-1])
+
 	log.Infof("New raidBoss for gym %s %v: ", gymInternal.Gym.Name, gymInternal.Gym.RaidBoss)
 
 	ticker := time.NewTicker(15 * time.Minute)
@@ -354,36 +446,6 @@ func extractAndVerifyTokensForBattle(trainersClient *clients.TrainersClient, use
 	}
 
 	return itemsToken.Items, &trainerStatsToken.TrainerStats, pokemonsInToken, nil
-}
-
-func loadGymsFromFile() (map[string]*GymInternal, error) {
-	data, err := ioutil.ReadFile(DefaultGymsFile)
-	if err != nil {
-		return nil, wrapLoadGymsError(err)
-	}
-
-	var gymsArr []*utils.Gym
-	err = json.Unmarshal(data, &gymsArr)
-	if err != nil {
-		return nil, wrapLoadGymsError(err)
-	}
-
-	var gymsMap = make(map[string]*GymInternal, len(gymsArr))
-	for _, gym := range gymsArr {
-		newGymInternal := &GymInternal{
-			Gym:  gym,
-			raid: nil,
-		}
-		gymsMap[gym.Name] = newGymInternal
-		go refreshRaidBossPeriodic(newGymInternal)
-		err = locationClient.AddGymLocation(*gym)
-		if err != nil {
-			log.Error(wrapLoadGymsError(err))
-		}
-	}
-
-	log.Infof("Loaded %d gyms.", len(gymsMap))
-	return gymsMap, nil
 }
 
 func loadPokemonSpecies() ([]string, error) {

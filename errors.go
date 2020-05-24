@@ -7,9 +7,10 @@ import (
 )
 
 const (
-	errorLoadGyms     = "error loading gyms"
-	errorLoadSpecies  = "error loading pokemon species"
-	errorTokensBattle = " error extracting and verifying tokens for battle"
+	errorLoadGymConfigs = "error loading gym configs"
+	errorLoadSpecies    = "error loading pokemon species"
+	errorTokensBattle   = " error extracting and verifying tokens for battle"
+	errorInit           = "error in init"
 
 	errorGymNoRaidBossFormat      = "gym %s has no raid boss"
 	errorRaidAlreadExistsFormat   = "raid %s already created"
@@ -17,12 +18,18 @@ const (
 	errorNoGymFoundFormat         = "no gym found with id %s"
 	errorNoRaidInGymFormat        = "no raid in gym %s"
 	errorRaidAlreadyStartedFormat = "raid already started in gym %s"
+	errorLoadingGymsFromDB                 = "error loading gyms from DB"
+	errorLoadingGymsToDB                 = "error loading gyms to DB"
 )
 
 var (
 	ErrorNotEnoughPokemons = errors.New("not enough pokemons")
 	ErrorTooManyPokemons   = errors.New("not enough pokemons")
 )
+
+func WrapInit(err error) error {
+	return errors.Wrap(err, errorInit)
+}
 
 // Wrappers handlers
 func wrapCreateGymError(err error) error {
@@ -42,8 +49,12 @@ func wrapGetGymInfoError(err error) error {
 }
 
 // Wrappers other functions
-func wrapLoadGymsError(err error) error {
-	return errors.Wrap(err, errorLoadGyms)
+func wrapLoadGymsFromDBError(err error) error {
+	return errors.Wrap(err, errorLoadingGymsFromDB)
+}
+
+func wrapLoadGymsToDBError(err error) error {
+	return errors.Wrap(err, errorLoadingGymsToDB)
 }
 
 func wrapLoadSpecies(err error) error {
@@ -55,6 +66,7 @@ func wrapTokensForBattleError(err error) error {
 }
 
 // Errors builders
+
 func newGymNoRaidBossError(gymId string) error {
 	return errors.New(fmt.Sprintf(errorGymNoRaidBossFormat, gymId))
 }

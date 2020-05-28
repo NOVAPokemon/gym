@@ -33,13 +33,14 @@ const PokemonsFile = "pokemons.json"
 const configFilename = "configs.json"
 
 var (
-	httpClient     *http.Client
-	locationClient *clients.LocationClient
-	gyms           map[string]*GymInternal
-	pokemonSpecies []string
-	config         *GymServerConfig
-	serverName     string
-	serverNr       int64
+	httpClient          *http.Client
+	locationClient      *clients.LocationClient
+	gyms                map[string]*GymInternal
+	pokemonSpecies      []string
+	config              *GymServerConfig
+	serverName          string
+	serverNr            int64
+	serviceNameHeadless string
 )
 
 type GymInternal struct {
@@ -49,6 +50,13 @@ type GymInternal struct {
 
 func init() {
 	var err error
+
+	if aux, exists := os.LookupEnv(utils.HeadlessServiceNameEnvVar); exists {
+		serviceNameHeadless = aux
+	} else {
+		log.Fatal("Could not load headless service name")
+	}
+
 	httpClient = &http.Client{}
 	locationClient = clients.NewLocationClient(utils.LocationClientConfig{})
 	if pokemonSpecies, err = loadPokemonSpecies(); err != nil {
@@ -136,10 +144,9 @@ func loadGymsToDb() error {
 		for _, gym := range gyms {
 			gymsForServer := utils.GymWithServer{
 				Gym:        gym,
-				ServerName: serverName,
+				ServerName: fmt.Sprintf("%s.%s", serverName, serviceNameHeadless),
 			}
-
-			log.Infof("Loaded gyms for server %s", serverName)
+			log.Infof("Loaded gyms for server %s", gymsForServer.ServerName)
 			if err = gymDb.UpsertGymWithServer(gymsForServer); err != nil {
 				return wrapLoadGymsToDBError(err)
 			}
@@ -162,7 +169,13 @@ func loadGymsFromDb(serverName string) (map[string]*GymInternal, error) {
 		}
 		gymsMap[gym.Name] = newGymInternal
 		go refreshRaidBossPeriodic(newGymInternal)
-		err = locationClient.AddGymLocation(gym)
+
+		gymWithServer := utils.GymWithServer{
+			ServerName: serverName,
+			Gym:        gym,
+		}
+
+		err = locationClient.AddGymLocation(gymWithServer)
 		if err != nil {
 			log.Error(wrapLoadGymsFromDBError(err))
 		}
@@ -189,7 +202,12 @@ func handleCreateGym(w http.ResponseWriter, r *http.Request) {
 	gyms[gym.Name] = newGymInternal
 	go refreshRaidBossPeriodic(newGymInternal)
 
-	err = locationClient.AddGymLocation(*gym)
+	gymWithServer := utils.GymWithServer{
+		ServerName: serverName,
+		Gym:        *gym,
+	}
+
+	err = locationClient.AddGymLocation(gymWithServer)
 	if err != nil {
 		utils.LogAndSendHTTPError(&w, wrapCreateGymError(err), http.StatusInternalServerError)
 		return

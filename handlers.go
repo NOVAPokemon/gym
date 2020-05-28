@@ -132,26 +132,29 @@ func loadGymsToDb() error {
 		}
 
 		serverName := strings.TrimSuffix(file.Name(), ".json")
-		gymsForServer := utils.GymsForServer{
-			Gyms:       gyms,
-			ServerName: serverName,
-		}
 
-		log.Infof("Loaded gyms for server %s", serverName)
-		if err = gymDb.UpsertGymsForServer(serverName, gymsForServer); err != nil {
-			return wrapLoadGymsToDBError(err)
+		for _, gym := range gyms {
+			gymsForServer := utils.GymWithServer{
+				Gym:        gym,
+				ServerName: serverName,
+			}
+
+			log.Infof("Loaded gyms for server %s", serverName)
+			if err = gymDb.UpsertGymWithServer(gymsForServer); err != nil {
+				return wrapLoadGymsToDBError(err)
+			}
 		}
 	}
 	return nil
 }
 
 func loadGymsFromDb(serverName string) (map[string]*GymInternal, error) {
-	gymsCfg, err := gymDb.GetGymsForServer(serverName)
+	gyms, err := gymDb.GetGymsForServer(serverName)
 	if err != nil {
 		return nil, wrapLoadGymsFromDBError(err)
 	}
-	var gymsMap = make(map[string]*GymInternal, len(gymsCfg.Gyms))
-	for _, gym := range gymsCfg.Gyms {
+	var gymsMap = make(map[string]*GymInternal, len(gyms))
+	for _, gym := range gyms {
 		log.Infof("Registering gym %s with location server", gym.Name)
 		newGymInternal := &GymInternal{
 			Gym:  &gym,

@@ -69,7 +69,8 @@ func init() {
 	}
 	log.Infof("Server name :%s; ServerNr: %d", serverName, serverNr)
 
-	for i := 0; i < 3; i++ {
+	for i := 0; i < 5; i++ {
+		time.Sleep(time.Duration(5*i) * time.Second)
 		gyms, err = loadGymsFromDb(serverName)
 		if err != nil {
 			log.Error(err)
@@ -83,7 +84,6 @@ func init() {
 		} else {
 			break
 		}
-		time.Sleep(time.Duration(5*i) * time.Second)
 	}
 
 	if gyms == nil {

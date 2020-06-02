@@ -7,7 +7,6 @@ import (
 )
 
 const (
-	errorLoadGymConfigs = "error loading gym configs"
 	errorLoadSpecies    = "error loading pokemon species"
 	errorTokensBattle   = " error extracting and verifying tokens for battle"
 	errorInit           = "error in init"
@@ -18,8 +17,8 @@ const (
 	errorNoGymFoundFormat         = "no gym found with id %s"
 	errorNoRaidInGymFormat        = "no raid in gym %s"
 	errorRaidAlreadyStartedFormat = "raid already started in gym %s"
-	errorLoadingGymsFromDB                 = "error loading gyms from DB"
-	errorLoadingGymsToDB                 = "error loading gyms to DB"
+	errorLoadingGymsFromDB        = "error loading gyms from DB"
+	errorLoadingGymsToDB          = "error loading gyms to DB"
 )
 
 var (

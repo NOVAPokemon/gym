@@ -254,7 +254,7 @@ func (r *RaidInternal) commitRaidResults(trainersClient *clients.TrainersClient)
 			log.Error(err)
 		}
 
-		//Update trainer stats: add experience
+		// Update trainer stats: add experience
 		experienceGain = experience.GetTrainerExperienceGainFromBattle(false)
 		if err := AddExperienceToPlayer(trainersClient, *r.playersBattleStatus[i], r.authTokens[i], *r.lobby.TrainerOutChannels[i], experienceGain); err != nil {
 			log.Error(err)
@@ -297,7 +297,7 @@ func UpdateTrainerPokemons(trainersClient *clients.TrainersClient, player battle
 	authToken string, outChan chan ws.GenericMsg, xpAmount float64) error {
 
 	// updates pokemon status after battle: adds XP and updates HP
-	//player 0
+	// player 0
 
 	for id, pokemon := range player.TrainerPokemons {
 		pokemon.XP += xpAmount

@@ -7,9 +7,9 @@ import (
 )
 
 const (
-	errorLoadSpecies    = "error loading pokemon species"
-	errorTokensBattle   = " error extracting and verifying tokens for battle"
-	errorInit           = "error in init"
+	errorLoadSpecies  = "error loading pokemon species"
+	errorTokensBattle = " error extracting and verifying tokens for battle"
+	errorInit         = "error in init"
 
 	errorGymNoRaidBossFormat      = "gym %s has no raid boss"
 	errorRaidAlreadExistsFormat   = "raid %s already created"

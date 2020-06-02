@@ -1,9 +1,10 @@
 package main
 
 import (
+	"strings"
+
 	"github.com/NOVAPokemon/utils"
 	"github.com/NOVAPokemon/utils/api"
-	"strings"
 )
 
 const CreateRaidName = "CREATE_RAID"

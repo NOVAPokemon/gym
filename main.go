@@ -17,7 +17,6 @@ var upgrader = websocket.Upgrader{
 }
 
 func main() {
-	recordMetrics()
 	utils.CheckLogFlag(serviceName)
 	utils.StartServer(serviceName, host, port, routes)
 }

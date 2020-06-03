@@ -20,7 +20,6 @@ func emitRaidStart() {
 	nrRaidsStarted.Inc()
 }
 
-
 func emitRaidFinish() {
 	nrRaidsFinished.Inc()
 }

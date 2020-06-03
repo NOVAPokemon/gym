@@ -7,11 +7,11 @@ import (
 
 var (
 	nrRaidsStarted = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "raids_started",
+		Name: "gym_raids_started",
 		Help: "The total number of started raids",
 	})
 	nrRaidsFinished = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "raids_finished",
+		Name: "gym_raids_finished",
 		Help: "The total number of finished raids",
 	})
 )

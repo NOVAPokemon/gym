@@ -119,6 +119,7 @@ func (r *RaidInternal) finish(success bool) {
 	for i := 0; i < r.lobby.TrainersJoined; i++ {
 		<-r.lobby.EndConnectionChannels[i]
 	}
+	emitRaidFinish()
 }
 
 func (r *RaidInternal) issueBossMoves() {

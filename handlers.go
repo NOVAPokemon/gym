@@ -169,7 +169,6 @@ func loadGymsFromDb(serverName string) (map[string]*GymInternal, error) {
 			raid: nil,
 		}
 		gymsMap[gym.Name] = newGymInternal
-		go refreshRaidBossPeriodic(newGymInternal)
 
 		gymWithServer := utils.GymWithServer{
 			ServerName: serverName,
@@ -180,6 +179,7 @@ func loadGymsFromDb(serverName string) (map[string]*GymInternal, error) {
 		if err != nil {
 			return nil, wrapLoadGymsFromDBError(err)
 		}
+		go refreshRaidBossPeriodic(newGymInternal)
 	}
 
 	log.Infof("Loaded %d gyms.", len(gymsMap))

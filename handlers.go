@@ -91,7 +91,7 @@ func init() {
 				}
 			}
 		} else {
-			break
+			return
 		}
 	}
 
@@ -178,7 +178,7 @@ func loadGymsFromDb(serverName string) (map[string]*GymInternal, error) {
 
 		err = locationClient.AddGymLocation(gymWithServer)
 		if err != nil {
-			log.Error(wrapLoadGymsFromDBError(err))
+			return nil, wrapLoadGymsFromDBError(err)
 		}
 	}
 

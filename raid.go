@@ -77,8 +77,10 @@ func (r *RaidInternal) Start() {
 	r.started = true
 	close(r.startChan)
 	log.Info("Sending Start message")
+	emitRaidStart()
 	r.sendMsgToAllClients(ws.Start, []string{})
 	r.issueBossMoves()
+	emitRaidFinish()
 }
 
 func (r *RaidInternal) handlePlayerChannels(i int) {
@@ -107,7 +109,6 @@ func (r *RaidInternal) handlePlayerChannels(i int) {
 }
 
 func (r *RaidInternal) finish(success bool) {
-	r.finished = true
 	r.lobby.Finished = true
 	if success {
 		r.commitRaidResults(r.trainersClient)
@@ -119,7 +120,6 @@ func (r *RaidInternal) finish(success bool) {
 	for i := 0; i < r.lobby.TrainersJoined; i++ {
 		<-r.lobby.EndConnectionChannels[i]
 	}
-	emitRaidFinish()
 }
 
 func (r *RaidInternal) issueBossMoves() {

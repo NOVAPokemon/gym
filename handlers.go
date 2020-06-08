@@ -9,6 +9,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/NOVAPokemon/utils"
@@ -29,6 +30,10 @@ const (
 	GymConfigsFolder = "gymConfigs"
 )
 
+type (
+	gymsMapType = GymInternal
+)
+
 // Pokemons taken from https://raw.githubusercontent.com/sindresorhus/pokemon/master/data/en.json
 const PokemonsFile = "pokemons.json"
 const configFilename = "configs.json"
@@ -36,7 +41,7 @@ const configFilename = "configs.json"
 var (
 	httpClient          *http.Client
 	locationClient      *clients.LocationClient
-	gyms                map[string]*GymInternal
+	gyms                sync.Map
 	pokemonSpecies      []string
 	config              *GymServerConfig
 	serverName          string
@@ -45,7 +50,7 @@ var (
 )
 
 type GymInternal struct {
-	Gym  *utils.Gym
+	Gym  utils.Gym
 	raid *RaidInternal
 }
 
@@ -80,7 +85,7 @@ func init() {
 
 	for i := 0; i < 5; i++ {
 		time.Sleep(time.Duration(5*i) * time.Second)
-		gyms, err = loadGymsFromDb(serverName)
+		err = loadGymsFromDb(serverName)
 		if err != nil {
 			log.Error(err)
 			if serverNr == 0 {
@@ -91,14 +96,30 @@ func init() {
 				}
 			}
 		} else {
+			go logGymsPeriodic()
 			return
 		}
 	}
+	size := 0
+	gyms.Range(func(key, value interface{}) bool {
+		size++
+		return false
+	})
 
-	if gyms == nil {
+	if size == 0 {
 		panic("Could not load gyms")
 	}
+}
 
+func logGymsPeriodic() {
+	for {
+		log.Info("Active gyms:")
+		gyms.Range(func(key, value interface{}) bool {
+			log.Infof("Gym name: %s, Gym: %+v", key, value)
+			return true
+		})
+		time.Sleep(10 * time.Second)
+	}
 }
 
 func loadConfig() (*GymServerConfig, error) {
@@ -145,67 +166,65 @@ func loadGymsToDb() error {
 		for _, gym := range gyms {
 			gymsForServer := utils.GymWithServer{
 				Gym:        gym,
-				ServerName: fmt.Sprintf("%s.%s", serverName, serviceNameHeadless),
+				ServerName: serverName,
 			}
-			log.Infof("Loaded gyms for server %s", gymsForServer.ServerName)
-			if err = gymDb.UpsertGymWithServer(gymsForServer); err != nil {
+			if err = gymDb.AddGymWithServer(gymsForServer); err != nil {
 				return wrapLoadGymsToDBError(err)
 			}
+			log.Infof("Loaded gym to database: %s", gym.Name)
 		}
+		log.Infof("Loaded gyms to database for server %s", serverName)
 	}
 	return nil
 }
 
-func loadGymsFromDb(serverName string) (map[string]*GymInternal, error) {
-	gyms, err := gymDb.GetGymsForServer(serverName)
+func loadGymsFromDb(serverName string) error {
+	gymsWithSrv, err := gymDb.GetGymsForServer(serverName)
 	if err != nil {
-		return nil, wrapLoadGymsFromDBError(err)
+		return wrapLoadGymsFromDBError(err)
 	}
-	var gymsMap = make(map[string]*GymInternal, len(gyms))
-	for _, gym := range gyms {
-		log.Infof("Registering gym %s with location server", gym.Name)
-		newGymInternal := &GymInternal{
-			Gym:  &gym,
+	for _, gymWithSrv := range gymsWithSrv {
+		newGymInternal := GymInternal{
+			Gym:  gymWithSrv.Gym,
 			raid: nil,
 		}
-		gymsMap[gym.Name] = newGymInternal
-
 		gymWithServer := utils.GymWithServer{
-			ServerName: serverName,
-			Gym:        gym,
+			ServerName: fmt.Sprintf("%s.%s", gymWithSrv.ServerName, serviceNameHeadless),
+			Gym:        gymWithSrv.Gym,
 		}
 
+		log.Infof("Registering gym %s with location server", gymWithSrv.Gym.Name)
 		err = locationClient.AddGymLocation(gymWithServer)
 		if err != nil {
-			return nil, wrapLoadGymsFromDBError(err)
+			return wrapLoadGymsFromDBError(err)
 		}
-		go refreshRaidBossPeriodic(newGymInternal)
-	}
+		log.Info("Done!")
 
-	log.Infof("Loaded %d gyms.", len(gymsMap))
-	return gymsMap, nil
+		gyms.Store(gymWithSrv.Gym.Name, newGymInternal)
+		go refreshRaidBossPeriodic(&newGymInternal)
+	}
+	return nil
 }
 
 func handleCreateGym(w http.ResponseWriter, r *http.Request) {
-	var gym = &utils.Gym{}
+	var gym = utils.Gym{}
 
-	err := json.NewDecoder(r.Body).Decode(gym)
+	err := json.NewDecoder(r.Body).Decode(&gym)
 	if err != nil {
 		utils.LogAndSendHTTPError(&w, wrapCreateGymError(err), http.StatusBadRequest)
 		return
 	}
 
-	newGymInternal := &GymInternal{
+	newGymInternal := GymInternal{
 		Gym:  gym,
 		raid: nil,
 	}
-
-	gyms[gym.Name] = newGymInternal
-	go refreshRaidBossPeriodic(newGymInternal)
+	gyms.Store(gym.Name, newGymInternal)
+	go refreshRaidBossPeriodic(&newGymInternal)
 
 	gymWithServer := utils.GymWithServer{
 		ServerName: serverName,
-		Gym:        *gym,
+		Gym:        gym,
 	}
 
 	err = locationClient.AddGymLocation(gymWithServer)
@@ -230,13 +249,13 @@ func handleCreateGym(w http.ResponseWriter, r *http.Request) {
 func handleCreateRaid(w http.ResponseWriter, r *http.Request) {
 	var gymId = mux.Vars(r)[api.GymIdPathVar]
 
-	gymInternal, ok := gyms[gymId]
+	value, ok := gyms.Load(gymId)
 	if !ok {
 		err := wrapCreateRaidError(newNoGymFoundError(gymId))
 		utils.LogAndSendHTTPError(&w, err, http.StatusNotFound)
 		return
 	}
-
+	gymInternal := value.(gymsMapType)
 	if gymInternal.Gym.RaidBoss == nil {
 		err := wrapCreateRaidError(newGymNoRaidBossError(gymId))
 		utils.LogAndSendHTTPError(&w, err, http.StatusBadRequest)
@@ -269,11 +288,10 @@ func handleCreateRaid(w http.ResponseWriter, r *http.Request) {
 	gymInternal.Gym.RaidForming = true
 	go handleRaidStart(gymInternal, startChan)
 	go gymInternal.raid.Start()
-	emitRaidStart()
 	log.Info("Created new raid")
 }
 
-func handleRaidStart(gym *GymInternal, startChan chan struct{}) {
+func handleRaidStart(gym GymInternal, startChan chan struct{}) {
 	gym.Gym.RaidForming = true
 	<-startChan
 	gym.Gym.RaidForming = false
@@ -323,7 +341,7 @@ func handleJoinRaid(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var gymId = mux.Vars(r)[api.GymIdPathVar]
-	gymInternal, ok := gyms[gymId]
+	value, ok := gyms.Load(gymId)
 	if !ok {
 		err = newNoGymFoundError(gymId)
 		log.Error(wrapJoinRaidError(err))
@@ -336,6 +354,7 @@ func handleJoinRaid(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	gymInternal := value.(gymsMapType)
 	if gymInternal.raid == nil {
 		err = newNoRaidInGymError(gymId)
 		log.Error(wrapJoinRaidError(err))
@@ -365,7 +384,7 @@ func handleJoinRaid(w http.ResponseWriter, r *http.Request) {
 func handleGetGymInfo(w http.ResponseWriter, r *http.Request) {
 	var gymId = mux.Vars(r)[api.GymIdPathVar]
 
-	gym, ok := gyms[gymId]
+	value, ok := gyms.Load(gymId)
 	if !ok {
 		err := newNoGymFoundError(gymId)
 		utils.LogAndSendHTTPError(&w, err, http.StatusNotFound)
@@ -373,7 +392,8 @@ func handleGetGymInfo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	toSend, err := json.Marshal(gym.Gym)
+	gymInternal := value.(gymsMapType)
+	toSend, err := json.Marshal(gymInternal.Gym)
 	if err != nil {
 		log.Error(wrapGetGymInfoError(err))
 	}
@@ -387,15 +407,12 @@ func handleGetGymInfo(w http.ResponseWriter, r *http.Request) {
 func refreshRaidBossPeriodic(gymInternal *GymInternal) {
 	gymInternal.Gym.RaidBoss = pokemons.GenerateRaidBoss(config.MaxLevel, config.StdHpDeviation, config.MaxHP,
 		config.StdDamageDeviation, config.MaxDamage, pokemonSpecies[rand.Intn(len(pokemonSpecies))-1])
-
 	log.Infof("New raidBoss for gym %s %v: ", gymInternal.Gym.Name, gymInternal.Gym.RaidBoss)
-
 	ticker := time.NewTicker(15 * time.Minute)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ticker.C:
-			log.Info("Refreshing boss...")
 			gymInternal.Gym.RaidBoss = pokemons.GenerateRaidBoss(config.MaxLevel, config.StdHpDeviation, config.MaxHP,
 				config.StdDamageDeviation, config.MaxDamage, pokemonSpecies[rand.Intn(len(pokemonSpecies))-1])
 			log.Infof("New raidBoss for gym %s %v: ", gymInternal.Gym.Name, gymInternal.Gym.RaidBoss)

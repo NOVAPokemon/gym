@@ -286,6 +286,7 @@ func handleCreateRaid(w http.ResponseWriter, r *http.Request) {
 		config.TimeToStartRaid)
 
 	gymInternal.Gym.RaidForming = true
+	gyms.Store(gymId, gymInternal)
 	go handleRaidStart(gymInternal, startChan)
 	go gymInternal.raid.Start()
 	log.Info("Created new raid")

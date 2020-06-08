@@ -76,11 +76,16 @@ func (r *RaidInternal) Start() {
 	<-startTimer.C
 	r.started = true
 	close(r.startChan)
-	log.Info("Sending Start message")
-	emitRaidStart()
-	r.sendMsgToAllClients(ws.Start, []string{})
-	r.issueBossMoves()
-	emitRaidFinish()
+	if r.lobby.TrainersJoined > 0 {
+		log.Info("Sending Start message")
+		emitRaidStart()
+		r.sendMsgToAllClients(ws.Start, []string{})
+		r.issueBossMoves()
+		emitRaidFinish()
+	} else {
+		r.lobby.Close()
+		return
+	}
 }
 
 func (r *RaidInternal) handlePlayerChannels(i int) {

@@ -118,7 +118,7 @@ func logGymsPeriodic() {
 			log.Infof("Gym name: %s, Gym: %+v", key, value)
 			return true
 		})
-		time.Sleep(10 * time.Second)
+		time.Sleep(30 * time.Second)
 	}
 }
 

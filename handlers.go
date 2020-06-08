@@ -201,7 +201,7 @@ func loadGymsFromDb(serverName string) error {
 		log.Info("Done!")
 
 		gyms.Store(gymWithSrv.Gym.Name, newGymInternal)
-		go refreshRaidBossPeriodic(&newGymInternal)
+		go refreshRaidBossPeriodic(gymWithSrv.Gym.Name)
 	}
 	return nil
 }
@@ -220,7 +220,7 @@ func handleCreateGym(w http.ResponseWriter, r *http.Request) {
 		raid: nil,
 	}
 	gyms.Store(gym.Name, newGymInternal)
-	go refreshRaidBossPeriodic(&newGymInternal)
+	go refreshRaidBossPeriodic(gym.Name)
 
 	gymWithServer := utils.GymWithServer{
 		ServerName: serverName,
@@ -404,17 +404,31 @@ func handleGetGymInfo(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func refreshRaidBossPeriodic(gymInternal *GymInternal) {
+func refreshRaidBossPeriodic(gymName string) {
+	value, ok := gyms.Load(gymName)
+	if !ok {
+		log.Infof("Routine generating raidboss for %s exiting", gymName)
+		return
+	}
+	gymInternal := value.(GymInternal)
 	gymInternal.Gym.RaidBoss = pokemons.GenerateRaidBoss(config.MaxLevel, config.StdHpDeviation, config.MaxHP,
 		config.StdDamageDeviation, config.MaxDamage, pokemonSpecies[rand.Intn(len(pokemonSpecies))-1])
+	gyms.Store(gymName, gymInternal)
 	log.Infof("New raidBoss for gym %s %v: ", gymInternal.Gym.Name, gymInternal.Gym.RaidBoss)
 	ticker := time.NewTicker(15 * time.Minute)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ticker.C:
+			value, ok := gyms.Load(gymName)
+			if !ok {
+				log.Infof("Routine generating raidboss for %s exiting", gymName)
+				return
+			}
+			gymInternal := value.(GymInternal)
 			gymInternal.Gym.RaidBoss = pokemons.GenerateRaidBoss(config.MaxLevel, config.StdHpDeviation, config.MaxHP,
 				config.StdDamageDeviation, config.MaxDamage, pokemonSpecies[rand.Intn(len(pokemonSpecies))-1])
+			gyms.Store(gymName, gymInternal)
 			log.Infof("New raidBoss for gym %s %v: ", gymInternal.Gym.Name, gymInternal.Gym.RaidBoss)
 		}
 	}

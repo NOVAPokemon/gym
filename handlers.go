@@ -287,16 +287,16 @@ func handleCreateRaid(w http.ResponseWriter, r *http.Request) {
 
 	gymInternal.Gym.RaidForming = true
 	gyms.Store(gymId, gymInternal)
-	go handleRaidStart(gymInternal, startChan)
+	go handleRaidStart(gymId, gymInternal, startChan)
 	go gymInternal.raid.Start()
 	log.Info("Created new raid")
 }
 
-func handleRaidStart(gym GymInternal, startChan chan struct{}) {
-	gym.Gym.RaidForming = true
+func handleRaidStart(gymId string, gym GymInternal, startChan chan struct{}) {
 	<-startChan
 	gym.Gym.RaidForming = false
 	gym.raid = nil
+	gyms.Store(gymId, gym)
 }
 
 func handleJoinRaid(w http.ResponseWriter, r *http.Request) {

@@ -114,7 +114,7 @@ func (r *RaidInternal) handlePlayerChannels(i int) {
 }
 
 func (r *RaidInternal) finish(success bool) {
-	r.lobby.Finished = true
+	close(r.lobby.Finished)
 	if success {
 		r.commitRaidResults(r.trainersClient)
 	} else {

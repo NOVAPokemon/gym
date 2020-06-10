@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"math/rand"
+	"sync/atomic"
 	"time"
 
 	"github.com/NOVAPokemon/utils"
@@ -21,39 +22,38 @@ import (
 type RaidInternal struct {
 	trainersClient      *clients.TrainersClient
 	raidBoss            *pokemons.Pokemon
-	lobby               *ws.RaidLobby
+	lobby               *ws.Lobby
 	authTokens          []string
 	playersBattleStatus []*battles.TrainerBattleStatus
 	disabledTrainers    []bool
-	started             bool
-	finished            bool
+	finished            chan interface{}
 	bossDefending       bool
-	startChan           chan struct{}
 	cooldown            time.Duration
-	waitTime            time.Duration
+	failedConnections   int32
 }
 
-func NewRaid(raidId primitive.ObjectID, expectedCapacity int, raidBoss pokemons.Pokemon, startChan chan struct{},
-	client *clients.TrainersClient, cooldownMilis int, waitTimeMilis int) *RaidInternal {
+func NewRaid(raidId primitive.ObjectID, capacity int, raidBoss pokemons.Pokemon, client *clients.TrainersClient, cooldownMilis int) *RaidInternal {
 	return &RaidInternal{
+		failedConnections:   0,
 		raidBoss:            &raidBoss,
-		lobby:               ws.NewRaidLobby(raidId, expectedCapacity),
-		authTokens:          make([]string, 0, expectedCapacity),
-		playersBattleStatus: make([]*battles.TrainerBattleStatus, 0, expectedCapacity),
-		disabledTrainers:    make([]bool, 0, expectedCapacity),
-		started:             false,
-		finished:            false,
-		startChan:           startChan,
+		lobby:               ws.NewLobby(raidId, capacity),
+		authTokens:          make([]string, capacity),
+		playersBattleStatus: make([]*battles.TrainerBattleStatus, capacity),
+		disabledTrainers:    make([]bool, capacity),
+		finished:            make(chan interface{}),
 		bossDefending:       false,
 		trainersClient:      client,
 		cooldown:            time.Duration(cooldownMilis) * time.Millisecond,
-		waitTime:            time.Duration(waitTimeMilis) * time.Millisecond,
 	}
-
 }
 
 func (r *RaidInternal) AddPlayer(username string, pokemons map[string]*pokemons.Pokemon, stats *utils.TrainerStats,
-	trainerItems map[string]items.Item, trainerConn *websocket.Conn, authToken string) {
+	trainerItems map[string]items.Item, trainerConn *websocket.Conn, authToken string) (int, error) {
+	trainerNr, err := ws.AddTrainer(r.lobby, username, trainerConn)
+	if err != nil {
+		return -1, wrapRaidAddPlayerError(err)
+	}
+
 	player := &battles.TrainerBattleStatus{
 		Username:        username,
 		TrainerStats:    stats,
@@ -63,19 +63,18 @@ func (r *RaidInternal) AddPlayer(username string, pokemons map[string]*pokemons.
 		UsedItems:       make(map[string]items.Item),
 		CdTimer:         time.NewTimer(r.cooldown),
 	}
+
 	log.Warn("Added player to raid")
-	r.disabledTrainers = append(r.disabledTrainers, false)
-	r.playersBattleStatus = append(r.playersBattleStatus, player)
-	r.authTokens = append(r.authTokens, authToken)
-	trainerNr := r.lobby.AddTrainer(username, trainerConn)
-	go r.handlePlayerChannels(int(trainerNr - 1))
+	r.disabledTrainers[trainerNr-1] = false
+	r.playersBattleStatus[trainerNr-1] = player
+	r.authTokens[trainerNr-1] = authToken
+	go r.handlePlayerChannel(trainerNr - 1)
+
+	return trainerNr, nil
 }
 
 func (r *RaidInternal) Start() {
-	startTimer := time.NewTimer(r.waitTime)
-	<-startTimer.C
-	r.started = true
-	close(r.startChan)
+	ws.StartLobby(r.lobby)
 	if r.lobby.TrainersJoined > 0 {
 		log.Info("Sending Start message")
 		emitRaidStart()
@@ -83,14 +82,14 @@ func (r *RaidInternal) Start() {
 		r.issueBossMoves()
 		emitRaidFinish()
 	} else {
-		r.lobby.Close()
+		ws.CloseLobby(r.lobby)
 		return
 	}
 }
 
-func (r *RaidInternal) handlePlayerChannels(i int) {
+func (r *RaidInternal) handlePlayerChannel(i int) {
 	log.Infof("Listening to channel %d", i)
-	for !r.finished {
+	for {
 		select {
 		case msgStr, ok := <-*r.lobby.TrainerInChannels[i]:
 			if ok {
@@ -103,31 +102,36 @@ func (r *RaidInternal) handlePlayerChannels(i int) {
 		case <-r.lobby.EndConnectionChannels[i]:
 			warn := fmt.Sprintf("An error occurred with user %s", r.playersBattleStatus[i].Username)
 			log.Warn(warn)
-			r.lobby.ActiveConnections--
+			failedNr := atomic.AddInt32(&r.failedConnections, 1)
 			r.disabledTrainers[i] = true
-			if r.lobby.ActiveConnections == 0 && !r.finished {
-				r.finish(false)
+			select {
+			case <-r.finished:
+				return
+			default:
+				if r.lobby.TrainersJoined == int(failedNr) {
+					r.finish(false, false)
+				}
+				return
 			}
+		case <-r.finished:
 			return
 		}
 	}
 }
 
-func (r *RaidInternal) finish(success bool) {
-	r.lobby.FinishChannelOnce.Do(func() {
-		close(r.lobby.Finished)
-	})
+func (r *RaidInternal) finish(success bool, trainersWon bool) {
+	select {
+	case <-r.lobby.Finished:
+	default:
+		if success {
+			r.commitRaidResults(r.trainersClient, trainersWon)
+		}
 
-	if success {
-		r.commitRaidResults(r.trainersClient)
-	} else {
-		r.lobby.Close()
-		return
-	}
-	r.sendMsgToAllClients(ws.Finish, []string{})
-
-	for i := 0; i < int(r.lobby.TrainersJoined); i++ {
-		<-r.lobby.EndConnectionChannels[i]
+		r.sendMsgToAllClients(ws.Finish, []string{})
+		for i := 0; i < r.lobby.TrainersJoined; i++ {
+			<-r.lobby.EndConnectionChannels[i]
+		}
+		ws.CloseLobby(r.lobby)
 	}
 }
 
@@ -135,57 +139,61 @@ func (r *RaidInternal) issueBossMoves() {
 	bossCooldown := 2 * time.Second
 	ticker := time.NewTicker(bossCooldown)
 	<-ticker.C
-	for !r.finished {
-		r.logRaidStatus()
-		randNr := rand.Float64()
-		var probAttack = 0.5
-		if randNr < probAttack {
-			log.Info("Issuing attack move...")
-			for i := 0; i < int(r.lobby.TrainersJoined); i++ {
-				if r.playersBattleStatus[i].SelectedPokemon != nil && !r.disabledTrainers[i] {
-					change := battles.ApplyAttackMove(r.raidBoss, r.playersBattleStatus[i].SelectedPokemon, r.playersBattleStatus[i].Defending)
-					if change {
-						battles.UpdateTrainerPokemon(
-							ws.NewTrackedMessage(primitive.NewObjectID()),
-							*r.playersBattleStatus[i].SelectedPokemon,
-							r.lobby.TrainerOutChannels[i],
-							true)
-						allPokemonsDead := true
-						for _, pokemon := range r.playersBattleStatus[i].TrainerPokemons {
-							if pokemon.HP > 0 {
-								allPokemonsDead = false
-								break
+	for {
+		select {
+		case <-ticker.C:
+			r.logRaidStatus()
+			randNr := rand.Float64()
+			var probAttack = 0.5
+			if randNr < probAttack {
+				log.Info("Issuing attack move...")
+				for i := 0; i < r.lobby.TrainersJoined; i++ {
+					if r.playersBattleStatus[i].SelectedPokemon != nil && !r.disabledTrainers[i] {
+						change := battles.ApplyAttackMove(r.raidBoss, r.playersBattleStatus[i].SelectedPokemon, r.playersBattleStatus[i].Defending)
+						if change {
+							battles.UpdateTrainerPokemon(
+								ws.NewTrackedMessage(primitive.NewObjectID()),
+								*r.playersBattleStatus[i].SelectedPokemon,
+								r.lobby.TrainerOutChannels[i],
+								true)
+							allPokemonsDead := true
+							for _, pokemon := range r.playersBattleStatus[i].TrainerPokemons {
+								if pokemon.HP > 0 {
+									allPokemonsDead = false
+									break
+								}
 							}
-						}
-						r.playersBattleStatus[i].AllPokemonsDead = allPokemonsDead
-						allTrainersDead := true
-						for i := 0; i < int(r.lobby.TrainersJoined); i++ {
-							if !r.playersBattleStatus[i].AllPokemonsDead && !r.disabledTrainers[i] {
-								allTrainersDead = false
-								break
+							r.playersBattleStatus[i].AllPokemonsDead = allPokemonsDead
+							allTrainersDead := true
+							for i := 0; i < r.lobby.TrainersJoined; i++ {
+								if !r.playersBattleStatus[i].AllPokemonsDead && !r.disabledTrainers[i] {
+									allTrainersDead = false
+									break
+								}
 							}
-						}
-						if allTrainersDead {
-							log.Info("All trainers dead, finishing raid")
-							r.finish(true)
-							return
+							if allTrainersDead {
+								log.Info("All trainers dead, finishing raid")
+								r.finish(true, false)
+								return
+							}
 						}
 					}
 				}
+			} else {
+				log.Info("Issuing defend move...")
+				r.sendMsgToAllClients(battles.Defend, []string{})
 			}
-		} else {
-			log.Info("Issuing defend move...")
-			r.sendMsgToAllClients(battles.Defend, []string{})
+		case <-r.finished:
+			log.Warn(r.finished)
+			log.Warn("Routine issuing boss moves exiting...")
+			return
 		}
-		<-ticker.C
 	}
-	log.Warn(r.finished)
-	log.Warn("Routine issuing boss moves exiting...")
 }
 
 func (r *RaidInternal) sendMsgToAllClients(msgType string, msgArgs []string) {
 	toSend := ws.Message{MsgType: msgType, MsgArgs: msgArgs}
-	for i := 0; i < int(r.lobby.TrainersJoined); i++ {
+	for i := 0; i < r.lobby.TrainersJoined; i++ {
 		if !r.disabledTrainers[i] {
 			_ = r.lobby.TrainerOutChannels[i].Write(ws.GenericMsg{
 				MsgType: websocket.TextMessage,
@@ -218,7 +226,7 @@ func (r *RaidInternal) handlePlayerMove(msgStr *string, issuer *battles.TrainerB
 				// raid is finished
 				log.Info("--------------RAID ENDED---------------")
 				log.Info("Winner : players")
-				r.finish(true)
+				r.finish(true, true)
 			}
 		}
 	case battles.Defend:
@@ -251,9 +259,9 @@ func (r *RaidInternal) handlePlayerMove(msgStr *string, issuer *battles.TrainerB
 	}
 }
 
-func (r *RaidInternal) commitRaidResults(trainersClient *clients.TrainersClient) {
+func (r *RaidInternal) commitRaidResults(trainersClient *clients.TrainersClient, playersWon bool) {
 	log.Infof("Committing battle results from raid")
-	for i := 0; i < int(r.lobby.TrainersJoined); i++ {
+	for i := 0; i < r.lobby.TrainersJoined; i++ {
 
 		if r.disabledTrainers[i] {
 			continue
@@ -264,13 +272,13 @@ func (r *RaidInternal) commitRaidResults(trainersClient *clients.TrainersClient)
 			log.Error(err)
 		}
 
-		experienceGain := experience.GetPokemonExperienceGainFromRaid(false)
+		experienceGain := experience.GetPokemonExperienceGainFromRaid(playersWon)
 		if err := UpdateTrainerPokemons(trainersClient, *r.playersBattleStatus[i], r.authTokens[i], r.lobby.TrainerOutChannels[i], experienceGain); err != nil {
 			log.Error(err)
 		}
 
 		// Update trainer stats: add experience
-		experienceGain = experience.GetTrainerExperienceGainFromBattle(false)
+		experienceGain = experience.GetTrainerExperienceGainFromBattle(playersWon)
 		if err := AddExperienceToPlayer(trainersClient, *r.playersBattleStatus[i], r.authTokens[i], r.lobby.TrainerOutChannels[i], experienceGain); err != nil {
 			log.Error(err)
 		}

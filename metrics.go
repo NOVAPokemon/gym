@@ -24,6 +24,3 @@ func emitRaidFinish() {
 	nrRaidsFinished.Inc()
 }
 
-func emitActiveGyms() {
-	nrRaidsFinished.Inc()
-}

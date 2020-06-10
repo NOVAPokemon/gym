@@ -274,29 +274,17 @@ func handleCreateRaid(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	startChan := make(chan struct{})
 	trainersClient := clients.NewTrainersClient(httpClient)
 	gymInternal.raid = NewRaid(
 		primitive.NewObjectID(),
-		config.PokemonsPerRaid,
+		config.MaxTrainersPerRaid,
 		*gymInternal.Gym.RaidBoss,
-		startChan,
 		trainersClient,
-		config.DefaultCooldown,
-		config.TimeToStartRaid)
-
+		config.DefaultCooldown)
 	gymInternal.Gym.RaidForming = true
 	gyms.Store(gymId, gymInternal)
-	go handleRaidStart(gymId, gymInternal, startChan)
-	go gymInternal.raid.Start()
+	go handleRaidStart(gymId, gymInternal)
 	log.Info("Created new raid")
-}
-
-func handleRaidStart(gymId string, gym GymInternal, startChan chan struct{}) {
-	<-startChan
-	gym.Gym.RaidForming = false
-	gym.raid = nil
-	gyms.Store(gymId, gym)
 }
 
 func handleJoinRaid(w http.ResponseWriter, r *http.Request) {
@@ -364,22 +352,26 @@ func handleJoinRaid(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			log.Error(wrapJoinRaidError(err))
 		}
-
 		return
 	}
 
-	if !gymInternal.raid.started {
-		gymInternal.raid.AddPlayer(authToken.Username, pokemonsForBattle, statsToken, trainerItems, conn,
-			r.Header.Get(tokens.AuthTokenHeaderName))
-	} else {
-		err = newRaidAlreadyStartedError(gymId)
+	_, err = gymInternal.raid.AddPlayer(authToken.Username, pokemonsForBattle, statsToken, trainerItems, conn, r.Header.Get(tokens.AuthTokenHeaderName))
+	if err != nil {
 		log.Error(wrapJoinRaidError(err))
-
 		err = writeErrorMessageAndClose(conn, err)
 		if err != nil {
 			log.Error(wrapJoinRaidError(err))
 		}
 	}
+}
+
+func handleRaidStart(gymId string, gym GymInternal) {
+	startTimer := time.NewTimer(time.Duration(config.TimeToStartRaid) * time.Millisecond)
+	<-startTimer.C
+	go gym.raid.Start()
+	gym.Gym.RaidForming = false
+	gym.raid = nil
+	gyms.Store(gymId, gym)
 }
 
 func handleGetGymInfo(w http.ResponseWriter, r *http.Request) {

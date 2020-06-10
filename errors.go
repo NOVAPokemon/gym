@@ -12,19 +12,19 @@ const (
 	errorTokensBattle = " error extracting and verifying tokens for battle"
 	errorInit         = "error in init"
 
-	errorGymNoRaidBossFormat      = "gym %s has no raid boss"
-	errorRaidAlreadExistsFormat   = "raid %s already created"
-	errorRaidBossDeadFormat       = "gym %s, raid boss dead"
-	errorNoGymFoundFormat         = "no gym found with id %s"
-	errorNoRaidInGymFormat        = "no raid in gym %s"
-	errorRaidAlreadyStartedFormat = "raid already started in gym %s"
-	errorLoadingGymsFromDB        = "error loading gyms from DB"
-	errorLoadingGymsToDB          = "error loading gyms to DB"
+	errorGymNoRaidBossFormat    = "gym %s has no raid boss"
+	errorRaidAlreadExistsFormat = "raid %s already created"
+	errorRaidBossDeadFormat     = "gym %s, raid boss dead"
+	errorNoGymFoundFormat       = "no gym found with id %s"
+	errorNoRaidInGymFormat      = "no raid in gym %s"
+	errorLoadingGymsFromDB      = "error loading gyms from DB"
+	errorLoadingGymsToDB        = "error loading gyms to DB"
+	errorJoiningRaid            = "error adding player to raid"
 )
 
 var (
 	ErrorNotEnoughPokemons = errors.New("not enough pokemons")
-	ErrorTooManyPokemons   = errors.New("not enough pokemons")
+	ErrorTooManyPokemons   = errors.New("too many pokemons")
 )
 
 func WrapInit(err error) error {
@@ -65,6 +65,10 @@ func wrapTokensForBattleError(err error) error {
 	return errors.Wrap(err, errorTokensBattle)
 }
 
+func wrapRaidAddPlayerError(err error) error {
+	return errors.Wrap(err, errorJoiningRaid)
+}
+
 // Errors builders
 
 func newGymNoRaidBossError(gymId string) error {
@@ -85,8 +89,4 @@ func newNoGymFoundError(gymId string) error {
 
 func newNoRaidInGymError(gymId string) error {
 	return errors.New(fmt.Sprintf(errorNoRaidInGymFormat, gymId))
-}
-
-func newRaidAlreadyStartedError(gymId string) error {
-	return errors.New(fmt.Sprintf(errorRaidAlreadyStartedFormat, gymId))
 }

@@ -1,9 +1,10 @@
 package main
 
 type GymServerConfig struct {
-	DefaultCooldown int // milliseconds
-	TimeToStartRaid int // milliseconds
-	PokemonsPerRaid int
+	DefaultCooldown    int // milliseconds
+	TimeToStartRaid    int // milliseconds
+	PokemonsPerRaid    int
+	MaxTrainersPerRaid int
 
 	MaxLevel           float64 `json:"max_level"`
 	MaxHP              float64 `json:"max_hp"`

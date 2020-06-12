@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"math/rand"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -29,6 +30,7 @@ type RaidInternal struct {
 	bossDefending       bool
 	cooldown            time.Duration
 	failedConnections   int32
+	finishOnce          sync.Once
 }
 
 func NewRaid(raidId primitive.ObjectID, capacity int, raidBoss pokemons.Pokemon, client *clients.TrainersClient, cooldownMilis int) *RaidInternal {
@@ -42,6 +44,7 @@ func NewRaid(raidId primitive.ObjectID, capacity int, raidBoss pokemons.Pokemon,
 		bossDefending:       false,
 		trainersClient:      client,
 		cooldown:            time.Duration(cooldownMilis) * time.Millisecond,
+		finishOnce:          sync.Once{},
 	}
 }
 
@@ -118,9 +121,7 @@ func (r *RaidInternal) handlePlayerChannel(i int) {
 }
 
 func (r *RaidInternal) finish(success bool, trainersWon bool) {
-	select {
-	case <-r.lobby.Finished:
-	default:
+	r.finishOnce.Do(func() {
 		ws.FinishLobby(r.lobby)
 		if success {
 			r.commitRaidResults(r.trainersClient, trainersWon)
@@ -131,7 +132,7 @@ func (r *RaidInternal) finish(success bool, trainersWon bool) {
 			<-r.lobby.EndConnectionChannels[i]
 		}
 		ws.CloseLobbyConnections(r.lobby)
-	}
+	})
 }
 
 func (r *RaidInternal) issueBossMoves() {

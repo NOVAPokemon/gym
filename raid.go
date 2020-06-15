@@ -76,7 +76,7 @@ func (r *RaidInternal) AddPlayer(username string, pokemons map[string]*pokemons.
 
 func (r *RaidInternal) Start() {
 	ws.StartLobby(r.lobby)
-	if r.lobby.TrainersJoined > 0 {
+	if ws.GetTrainersJoined(r.lobby) > 0 {
 		log.Info("Sending Start message")
 		emitRaidStart()
 		r.sendMsgToAllClients(ws.Start, []string{})
@@ -109,7 +109,7 @@ func (r *RaidInternal) handlePlayerChannel(i int) {
 			case <-r.lobby.Finished:
 				return
 			default:
-				if r.lobby.TrainersJoined == int(failedNr) {
+				if ws.GetTrainersJoined(r.lobby) == int(failedNr) {
 					r.finish(false, false)
 				}
 				return
@@ -128,7 +128,7 @@ func (r *RaidInternal) finish(success bool, trainersWon bool) {
 		}
 
 		r.sendMsgToAllClients(ws.Finish, []string{})
-		for i := 0; i < r.lobby.TrainersJoined; i++ {
+		for i := 0; i < ws.GetTrainersJoined(r.lobby); i++ {
 			<-r.lobby.EndConnectionChannels[i]
 		}
 		ws.CloseLobbyConnections(r.lobby)
@@ -147,7 +147,7 @@ func (r *RaidInternal) issueBossMoves() {
 			var probAttack = 0.5
 			if randNr < probAttack {
 				log.Info("Issuing attack move...")
-				for i := 0; i < r.lobby.TrainersJoined; i++ {
+				for i := 0; i < ws.GetTrainersJoined(r.lobby); i++ {
 					if r.playersBattleStatus[i].SelectedPokemon != nil && !r.disabledTrainers[i] {
 						change := battles.ApplyAttackMove(r.raidBoss, r.playersBattleStatus[i].SelectedPokemon, r.playersBattleStatus[i].Defending)
 						if change {
@@ -165,7 +165,7 @@ func (r *RaidInternal) issueBossMoves() {
 							}
 							r.playersBattleStatus[i].AllPokemonsDead = allPokemonsDead
 							allTrainersDead := true
-							for i := 0; i < r.lobby.TrainersJoined; i++ {
+							for i := 0; i < ws.GetTrainersJoined(r.lobby); i++ {
 								if !r.playersBattleStatus[i].AllPokemonsDead && !r.disabledTrainers[i] {
 									allTrainersDead = false
 									break
@@ -193,7 +193,7 @@ func (r *RaidInternal) issueBossMoves() {
 
 func (r *RaidInternal) sendMsgToAllClients(msgType string, msgArgs []string) {
 	toSend := ws.Message{MsgType: msgType, MsgArgs: msgArgs}
-	for i := 0; i < r.lobby.TrainersJoined; i++ {
+	for i := 0; i < ws.GetTrainersJoined(r.lobby); i++ {
 		if !r.disabledTrainers[i] {
 			r.lobby.TrainerOutChannels[i] <- ws.GenericMsg{
 				MsgType: websocket.TextMessage,
@@ -261,7 +261,7 @@ func (r *RaidInternal) handlePlayerMove(msgStr *string, issuer *battles.TrainerB
 
 func (r *RaidInternal) commitRaidResults(trainersClient *clients.TrainersClient, playersWon bool) {
 	log.Infof("Committing battle results from raid")
-	for i := 0; i < r.lobby.TrainersJoined; i++ {
+	for i := 0; i < ws.GetTrainersJoined(r.lobby); i++ {
 
 		if r.disabledTrainers[i] {
 			continue

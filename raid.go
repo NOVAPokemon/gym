@@ -31,20 +31,24 @@ type RaidInternal struct {
 	cooldown                time.Duration
 	failedConnections       int32
 	finishOnce              sync.Once
+	bossLock                sync.Mutex
 }
 
 func NewRaid(raidId primitive.ObjectID, capacity int, raidBoss pokemons.Pokemon, client *clients.TrainersClient, cooldownMilis int) *RaidInternal {
 	return &RaidInternal{
-		failedConnections:       0,
-		raidBoss:                &raidBoss,
+		failedConnections: 0,
+
 		lobby:                   ws.NewLobby(raidId, capacity),
 		authTokens:              make([]string, capacity),
 		playersBattleStatus:     make([]*battles.TrainerBattleStatus, capacity),
 		playerBattleStatusLocks: make([]sync.Mutex, capacity),
-		bossDefending:           false,
-		trainersClient:          client,
-		cooldown:                time.Duration(cooldownMilis) * time.Millisecond,
-		finishOnce:              sync.Once{},
+
+		bossLock:       sync.Mutex{},
+		raidBoss:       &raidBoss,
+		bossDefending:  false,
+		trainersClient: client,
+		cooldown:       time.Duration(cooldownMilis) * time.Millisecond,
+		finishOnce:     sync.Once{},
 	}
 }
 
@@ -145,7 +149,6 @@ func (r *RaidInternal) issueBossMoves() {
 	for {
 		select {
 		case <-ticker.C:
-			r.logRaidStatus()
 			randNr := rand.Float64()
 			var probAttack = 0.5
 			if randNr < probAttack {
@@ -212,11 +215,6 @@ func (r *RaidInternal) sendMsgToAllClients(msgType string, msgArgs []string) {
 	}
 }
 
-func (r *RaidInternal) logRaidStatus() {
-	log.Info("----------------------------------------")
-	log.Infof("Raid pokemon: pokemon:ID:%s, Damage:%d, HP:%d, maxHP:%d, Species:%s", r.raidBoss.Id.Hex(), r.raidBoss.Damage, r.raidBoss.HP, r.raidBoss.MaxHP, r.raidBoss.Species)
-}
-
 func (r *RaidInternal) handlePlayerMove(msgStr *string, issuer *battles.TrainerBattleStatus, issuerChan chan ws.GenericMsg) {
 	message, err := ws.ParseMessage(msgStr)
 	if err != nil {
@@ -230,6 +228,7 @@ func (r *RaidInternal) handlePlayerMove(msgStr *string, issuer *battles.TrainerB
 
 	switch message.MsgType {
 	case battles.Attack:
+		r.bossLock.Lock()
 		if changed := battles.HandleAttackMove(issuer, issuerChan, r.bossDefending, r.raidBoss, r.cooldown); changed {
 			if r.raidBoss.HP <= 0 {
 				// raid is finished
@@ -238,6 +237,7 @@ func (r *RaidInternal) handlePlayerMove(msgStr *string, issuer *battles.TrainerB
 				r.finish(true, true)
 			}
 		}
+		r.bossLock.Lock()
 	case battles.Defend:
 		battles.HandleDefendMove(issuer, issuerChan, r.cooldown)
 	case battles.UseItem:

@@ -237,7 +237,7 @@ func (r *RaidInternal) handlePlayerMove(msgStr *string, issuer *battles.TrainerB
 				r.finish(true, true)
 			}
 		}
-		r.bossLock.Lock()
+		r.bossLock.Unlock()
 	case battles.Defend:
 		battles.HandleDefendMove(issuer, issuerChan, r.cooldown)
 	case battles.UseItem:

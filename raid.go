@@ -153,12 +153,15 @@ func (r *RaidInternal) issueBossMoves() {
 			var probAttack = 0.5
 			if randNr < probAttack {
 				log.Info("Issuing attack move...")
+				r.bossLock.Lock()
+				r.bossDefending = false
+				r.bossLock.Unlock()
 				for i := 0; i < ws.GetTrainersJoined(r.lobby); i++ {
-					r.playerBattleStatusLocks[i].Lock()
-					if r.playersBattleStatus[i].SelectedPokemon != nil {
-						select {
-						case <-r.lobby.EndConnectionChannels[i]:
-						default:
+					select {
+					case <-r.lobby.EndConnectionChannels[i]:
+					default:
+						r.playerBattleStatusLocks[i].Lock()
+						if r.playersBattleStatus[i].SelectedPokemon != nil {
 							change := battles.ApplyAttackMove(r.raidBoss, r.playersBattleStatus[i].SelectedPokemon, r.playersBattleStatus[i].Defending)
 							if change {
 								battles.UpdateTrainerPokemon(
@@ -169,7 +172,7 @@ func (r *RaidInternal) issueBossMoves() {
 								allPokemonsDead := r.playersBattleStatus[i].AreAllPokemonsDead()
 								r.playersBattleStatus[i].AllPokemonsDead = allPokemonsDead
 								if allPokemonsDead {
-									allTrainersDead := false
+									allTrainersDead := true
 									for j := 0; j < ws.GetTrainersJoined(r.lobby); j++ {
 										// no need to lock other status because no other routine changes AllPokemonsDead field
 										if !r.playersBattleStatus[j].AllPokemonsDead {
@@ -186,11 +189,14 @@ func (r *RaidInternal) issueBossMoves() {
 								}
 							}
 						}
+						r.playerBattleStatusLocks[i].Unlock()
 					}
-					r.playerBattleStatusLocks[i].Unlock()
 				}
 			} else {
 				log.Info("Issuing defend move...")
+				r.bossLock.Lock()
+				r.bossDefending = true
+				r.bossLock.Unlock()
 				r.sendMsgToAllClients(battles.Defend, []string{})
 			}
 		case <-r.lobby.Finished:

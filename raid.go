@@ -35,15 +35,16 @@ type RaidInternal struct {
 
 func NewRaid(raidId primitive.ObjectID, capacity int, raidBoss pokemons.Pokemon, client *clients.TrainersClient, cooldownMilis int) *RaidInternal {
 	return &RaidInternal{
-		failedConnections:   0,
-		raidBoss:            &raidBoss,
-		lobby:               ws.NewLobby(raidId, capacity),
-		authTokens:          make([]string, capacity),
-		playersBattleStatus: make([]*battles.TrainerBattleStatus, capacity),
-		bossDefending:       false,
-		trainersClient:      client,
-		cooldown:            time.Duration(cooldownMilis) * time.Millisecond,
-		finishOnce:          sync.Once{},
+		failedConnections:       0,
+		raidBoss:                &raidBoss,
+		lobby:                   ws.NewLobby(raidId, capacity),
+		authTokens:              make([]string, capacity),
+		playersBattleStatus:     make([]*battles.TrainerBattleStatus, capacity),
+		playerBattleStatusLocks: make([]sync.Mutex, capacity),
+		bossDefending:           false,
+		trainersClient:          client,
+		cooldown:                time.Duration(cooldownMilis) * time.Millisecond,
+		finishOnce:              sync.Once{},
 	}
 }
 

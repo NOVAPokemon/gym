@@ -21,16 +21,16 @@ import (
 )
 
 type RaidInternal struct {
-	trainersClient      *clients.TrainersClient
-	raidBoss            *pokemons.Pokemon
-	lobby               *ws.Lobby
-	authTokens          []string
-	playersBattleStatus []*battles.TrainerBattleStatus
-	disabledTrainers    []bool
-	bossDefending       bool
-	cooldown            time.Duration
-	failedConnections   int32
-	finishOnce          sync.Once
+	trainersClient          *clients.TrainersClient
+	raidBoss                *pokemons.Pokemon
+	lobby                   *ws.Lobby
+	authTokens              []string
+	playerBattleStatusLocks []sync.Mutex
+	playersBattleStatus     []*battles.TrainerBattleStatus
+	bossDefending           bool
+	cooldown                time.Duration
+	failedConnections       int32
+	finishOnce              sync.Once
 }
 
 func NewRaid(raidId primitive.ObjectID, capacity int, raidBoss pokemons.Pokemon, client *clients.TrainersClient, cooldownMilis int) *RaidInternal {
@@ -40,7 +40,6 @@ func NewRaid(raidId primitive.ObjectID, capacity int, raidBoss pokemons.Pokemon,
 		lobby:               ws.NewLobby(raidId, capacity),
 		authTokens:          make([]string, capacity),
 		playersBattleStatus: make([]*battles.TrainerBattleStatus, capacity),
-		disabledTrainers:    make([]bool, capacity),
 		bossDefending:       false,
 		trainersClient:      client,
 		cooldown:            time.Duration(cooldownMilis) * time.Millisecond,
@@ -66,7 +65,7 @@ func (r *RaidInternal) AddPlayer(username string, pokemons map[string]*pokemons.
 	}
 
 	log.Warn("Added player to raid")
-	r.disabledTrainers[trainerNr-1] = false
+	r.playerBattleStatusLocks[trainerNr-1] = sync.Mutex{}
 	r.playersBattleStatus[trainerNr-1] = player
 	r.authTokens[trainerNr-1] = authToken
 	go r.handlePlayerChannel(trainerNr - 1)
@@ -94,17 +93,20 @@ func (r *RaidInternal) handlePlayerChannel(i int) {
 		select {
 		case msgStr, ok := <-r.lobby.TrainerInChannels[i]:
 			if ok {
+				r.playerBattleStatusLocks[i].Lock()
 				r.handlePlayerMove(msgStr, r.playersBattleStatus[i], r.lobby.TrainerOutChannels[i])
+				r.playerBattleStatusLocks[i].Unlock()
 			}
 		case <-r.playersBattleStatus[i].CdTimer.C:
+			r.playerBattleStatusLocks[i].Lock()
 			r.playersBattleStatus[i].Cooldown = false
 			r.playersBattleStatus[i].Defending = false
+			r.playerBattleStatusLocks[i].Unlock()
 
 		case <-r.lobby.EndConnectionChannels[i]:
 			warn := fmt.Sprintf("An error occurred with user %s", r.playersBattleStatus[i].Username)
 			log.Warn(warn)
 			failedNr := atomic.AddInt32(&r.failedConnections, 1)
-			r.disabledTrainers[i] = true
 			select {
 			case <-r.lobby.Finished:
 				return
@@ -148,36 +150,40 @@ func (r *RaidInternal) issueBossMoves() {
 			if randNr < probAttack {
 				log.Info("Issuing attack move...")
 				for i := 0; i < ws.GetTrainersJoined(r.lobby); i++ {
-					if r.playersBattleStatus[i].SelectedPokemon != nil && !r.disabledTrainers[i] {
-						change := battles.ApplyAttackMove(r.raidBoss, r.playersBattleStatus[i].SelectedPokemon, r.playersBattleStatus[i].Defending)
-						if change {
-							battles.UpdateTrainerPokemon(
-								ws.NewTrackedMessage(primitive.NewObjectID()),
-								*r.playersBattleStatus[i].SelectedPokemon,
-								r.lobby.TrainerOutChannels[i],
-								true)
-							allPokemonsDead := true
-							for _, pokemon := range r.playersBattleStatus[i].TrainerPokemons {
-								if pokemon.HP > 0 {
-									allPokemonsDead = false
-									break
+					r.playerBattleStatusLocks[i].Lock()
+					if r.playersBattleStatus[i].SelectedPokemon != nil {
+						select {
+						case <-r.lobby.EndConnectionChannels[i]:
+						default:
+							change := battles.ApplyAttackMove(r.raidBoss, r.playersBattleStatus[i].SelectedPokemon, r.playersBattleStatus[i].Defending)
+							if change {
+								battles.UpdateTrainerPokemon(
+									ws.NewTrackedMessage(primitive.NewObjectID()),
+									*r.playersBattleStatus[i].SelectedPokemon,
+									r.lobby.TrainerOutChannels[i],
+									true)
+								allPokemonsDead := r.playersBattleStatus[i].AreAllPokemonsDead()
+								r.playersBattleStatus[i].AllPokemonsDead = allPokemonsDead
+								if allPokemonsDead {
+									allTrainersDead := false
+									for j := 0; j < ws.GetTrainersJoined(r.lobby); j++ {
+										// no need to lock other status because no other routine changes AllPokemonsDead field
+										if !r.playersBattleStatus[j].AllPokemonsDead {
+											allTrainersDead = false
+											break
+										}
+									}
+									if allTrainersDead {
+										log.Info("All trainers dead, finishing raid")
+										r.finish(true, false)
+										r.playerBattleStatusLocks[i].Unlock()
+										return
+									}
 								}
-							}
-							r.playersBattleStatus[i].AllPokemonsDead = allPokemonsDead
-							allTrainersDead := true
-							for i := 0; i < ws.GetTrainersJoined(r.lobby); i++ {
-								if !r.playersBattleStatus[i].AllPokemonsDead && !r.disabledTrainers[i] {
-									allTrainersDead = false
-									break
-								}
-							}
-							if allTrainersDead {
-								log.Info("All trainers dead, finishing raid")
-								r.finish(true, false)
-								return
 							}
 						}
 					}
+					r.playerBattleStatusLocks[i].Unlock()
 				}
 			} else {
 				log.Info("Issuing defend move...")
@@ -194,7 +200,9 @@ func (r *RaidInternal) issueBossMoves() {
 func (r *RaidInternal) sendMsgToAllClients(msgType string, msgArgs []string) {
 	toSend := ws.Message{MsgType: msgType, MsgArgs: msgArgs}
 	for i := 0; i < ws.GetTrainersJoined(r.lobby); i++ {
-		if !r.disabledTrainers[i] {
+		select {
+		case <-r.lobby.EndConnectionChannels[i]:
+		default:
 			r.lobby.TrainerOutChannels[i] <- ws.GenericMsg{
 				MsgType: websocket.TextMessage,
 				Data:    []byte(toSend.Serialize()),
@@ -263,7 +271,9 @@ func (r *RaidInternal) commitRaidResults(trainersClient *clients.TrainersClient,
 	log.Infof("Committing battle results from raid")
 	for i := 0; i < ws.GetTrainersJoined(r.lobby); i++ {
 
-		if r.disabledTrainers[i] {
+		select {
+		case <-r.lobby.EndConnectionChannels[i]:
+		default:
 			continue
 		}
 

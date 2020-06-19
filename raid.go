@@ -212,11 +212,10 @@ func (r *RaidInternal) sendMsgToAllClients(msgType string, msgArgs []string) {
 	for i := 0; i < ws.GetTrainersJoined(r.lobby); i++ {
 		select {
 		case <-r.lobby.EndConnectionChannels[i]:
-		default:
-			r.lobby.TrainerOutChannels[i] <- ws.GenericMsg{
-				MsgType: websocket.TextMessage,
-				Data:    []byte(toSend.Serialize()),
-			}
+		case r.lobby.TrainerOutChannels[i] <- ws.GenericMsg{
+			MsgType: websocket.TextMessage,
+			Data:    []byte(toSend.Serialize()),
+		}:
 		}
 	}
 }

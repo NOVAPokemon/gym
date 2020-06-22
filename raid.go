@@ -87,8 +87,7 @@ func (r *RaidInternal) Start() {
 		r.issueBossMoves()
 		emitRaidFinish()
 	} else {
-		ws.CloseLobbyConnections(r.lobby)
-		return
+		ws.FinishLobby(r.lobby)
 	}
 }
 
@@ -108,37 +107,42 @@ func (r *RaidInternal) handlePlayerChannel(i int) {
 			r.playersBattleStatus[i].Defending = false
 			r.playerBattleStatusLocks[i].Unlock()
 
-		case <-r.lobby.EndConnectionChannels[i]:
-			warn := fmt.Sprintf("An error occurred with user %s", r.playersBattleStatus[i].Username)
-			log.Warn(warn)
-			failedNr := atomic.AddInt32(&r.failedConnections, 1)
-			select {
-			case <-r.lobby.Finished:
-				return
-			default:
-				if ws.GetTrainersJoined(r.lobby) == int(failedNr) {
-					r.finish(false, false)
-				}
-				return
-			}
+		case <-r.lobby.DoneListeningFromConn[i]:
+			r.handlePlayerLeave(i)
+		case <-r.lobby.DoneWritingToConn[i]:
+			r.handlePlayerLeave(i)
 		case <-r.lobby.Finished:
 			return
 		}
 	}
 }
 
+func (r *RaidInternal) handlePlayerLeave(playerNr int) {
+	warn := fmt.Sprintf("An error occurred with user %s", r.playersBattleStatus[playerNr].Username)
+	log.Warn(warn)
+	failedNr := atomic.AddInt32(&r.failedConnections, 1)
+	select {
+	case <-r.lobby.Finished:
+		return
+	default:
+		if ws.GetTrainersJoined(r.lobby) == int(failedNr) {
+			r.finish(false, false)
+		}
+		return
+	}
+}
+
 func (r *RaidInternal) finish(success bool, trainersWon bool) {
 	r.finishOnce.Do(func() {
-		ws.FinishLobby(r.lobby)
 		if success {
 			r.commitRaidResults(r.trainersClient, trainersWon)
 		}
 
 		r.sendMsgToAllClients(ws.Finish, []string{})
 		for i := 0; i < ws.GetTrainersJoined(r.lobby); i++ {
-			<-r.lobby.EndConnectionChannels[i]
+			<-r.lobby.DoneListeningFromConn[i]
 		}
-		ws.CloseLobbyConnections(r.lobby)
+		ws.FinishLobby(r.lobby)
 	})
 }
 
@@ -158,7 +162,8 @@ func (r *RaidInternal) issueBossMoves() {
 				r.bossLock.Unlock()
 				for i := 0; i < ws.GetTrainersJoined(r.lobby); i++ {
 					select {
-					case <-r.lobby.EndConnectionChannels[i]:
+					case <-r.lobby.DoneListeningFromConn[i]:
+					case <-r.lobby.DoneWritingToConn[i]:
 					default:
 						r.playerBattleStatusLocks[i].Lock()
 						if r.playersBattleStatus[i].SelectedPokemon != nil {
@@ -211,7 +216,8 @@ func (r *RaidInternal) sendMsgToAllClients(msgType string, msgArgs []string) {
 	toSend := ws.Message{MsgType: msgType, MsgArgs: msgArgs}
 	for i := 0; i < ws.GetTrainersJoined(r.lobby); i++ {
 		select {
-		case <-r.lobby.EndConnectionChannels[i]:
+		case <-r.lobby.DoneListeningFromConn[i]:
+		case <-r.lobby.DoneWritingToConn[i]:
 		case r.lobby.TrainerOutChannels[i] <- ws.GenericMsg{
 			MsgType: websocket.TextMessage,
 			Data:    []byte(toSend.Serialize()),
@@ -220,7 +226,7 @@ func (r *RaidInternal) sendMsgToAllClients(msgType string, msgArgs []string) {
 	}
 }
 
-func (r *RaidInternal) handlePlayerMove(msgStr *string, issuer *battles.TrainerBattleStatus, issuerChan chan ws.GenericMsg) {
+func (r *RaidInternal) handlePlayerMove(msgStr string, issuer *battles.TrainerBattleStatus, issuerChan chan ws.GenericMsg) {
 	message, err := ws.ParseMessage(msgStr)
 	if err != nil {
 		errMsg := ws.Message{MsgType: ws.Error, MsgArgs: []string{ws.ErrorInvalidMessageFormat.Error()}}
@@ -278,9 +284,10 @@ func (r *RaidInternal) commitRaidResults(trainersClient *clients.TrainersClient,
 	for i := 0; i < ws.GetTrainersJoined(r.lobby); i++ {
 
 		select {
-		case <-r.lobby.EndConnectionChannels[i]:
+		case <-r.lobby.DoneListeningFromConn[i]:
+		case <-r.lobby.DoneWritingToConn[i]:
 		default:
-			continue
+			continue // skips trainer that left in the beggining
 		}
 
 		// Update trainer items, removing the items that were used during the battle

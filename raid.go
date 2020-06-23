@@ -281,30 +281,38 @@ func (r *RaidInternal) handlePlayerMove(msgStr string, issuer *battles.TrainerBa
 
 func (r *RaidInternal) commitRaidResults(trainersClient *clients.TrainersClient, playersWon bool) {
 	log.Infof("Committing battle results from raid")
+	var wg sync.WaitGroup
 	for i := 0; i < ws.GetTrainersJoined(r.lobby); i++ {
-
 		select {
 		case <-r.lobby.DoneListeningFromConn[i]:
 		case <-r.lobby.DoneWritingToConn[i]:
 		default:
-			continue // skips trainer that left in the beggining
+			wg.Add(1)
+			trainerNr := i
+			go r.commitRaidResultsForTrainer(trainersClient, trainerNr, playersWon, &wg)
 		}
+	}
+	wg.Wait()
+}
 
-		// Update trainer items, removing the items that were used during the battle
-		if err := RemoveUsedItems(trainersClient, *r.playersBattleStatus[i], r.authTokens[i], r.lobby.TrainerOutChannels[i]); err != nil {
-			log.Error(err)
-		}
+func (r *RaidInternal) commitRaidResultsForTrainer(trainersClient *clients.TrainersClient, trainerNr int, trainersWon bool, wg *sync.WaitGroup) {
+	defer wg.Done()
+	log.Infof("Committing battle results from raid")
 
-		experienceGain := experience.GetPokemonExperienceGainFromRaid(playersWon)
-		if err := UpdateTrainerPokemons(trainersClient, *r.playersBattleStatus[i], r.authTokens[i], r.lobby.TrainerOutChannels[i], experienceGain); err != nil {
-			log.Error(err)
-		}
+	// Update trainer items, removing the items that were used during the battle
+	if err := RemoveUsedItems(trainersClient, *r.playersBattleStatus[trainerNr], r.authTokens[trainerNr], r.lobby.TrainerOutChannels[trainerNr]); err != nil {
+		log.Error(err)
+	}
 
-		// Update trainer stats: add experience
-		experienceGain = experience.GetTrainerExperienceGainFromBattle(playersWon)
-		if err := AddExperienceToPlayer(trainersClient, *r.playersBattleStatus[i], r.authTokens[i], r.lobby.TrainerOutChannels[i], experienceGain); err != nil {
-			log.Error(err)
-		}
+	experienceGain := experience.GetPokemonExperienceGainFromRaid(trainersWon)
+	if err := UpdateTrainerPokemons(trainersClient, *r.playersBattleStatus[trainerNr], r.authTokens[trainerNr], r.lobby.TrainerOutChannels[trainerNr], experienceGain); err != nil {
+		log.Error(err)
+	}
+
+	// Update trainer stats: add experience
+	experienceGain = experience.GetTrainerExperienceGainFromBattle(trainersWon)
+	if err := AddExperienceToPlayer(trainersClient, *r.playersBattleStatus[trainerNr], r.authTokens[trainerNr], r.lobby.TrainerOutChannels[trainerNr], experienceGain); err != nil {
+		log.Error(err)
 	}
 }
 

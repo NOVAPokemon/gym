@@ -140,7 +140,10 @@ func (r *RaidInternal) finish(success bool, trainersWon bool) {
 
 		r.sendMsgToAllClients(ws.Finish, []string{})
 		for i := 0; i < ws.GetTrainersJoined(r.lobby); i++ {
-			<-r.lobby.DoneListeningFromConn[i]
+			select {
+			case <-r.lobby.DoneListeningFromConn[i]:
+			case <-time.After(3 * time.Second):
+			}
 		}
 		ws.FinishLobby(r.lobby)
 	})

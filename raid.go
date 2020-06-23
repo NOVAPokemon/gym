@@ -289,29 +289,29 @@ func (r *RaidInternal) commitRaidResults(trainersClient *clients.TrainersClient,
 		default:
 			wg.Add(1)
 			trainerNr := i
-			go r.commitRaidResultsForTrainer(trainersClient, trainerNr, playersWon, &wg)
+			go r.commitRaidResultsForTrainer(*trainersClient, trainerNr, playersWon, &wg)
 		}
 	}
 	wg.Wait()
 }
 
-func (r *RaidInternal) commitRaidResultsForTrainer(trainersClient *clients.TrainersClient, trainerNr int, trainersWon bool, wg *sync.WaitGroup) {
+func (r *RaidInternal) commitRaidResultsForTrainer(trainersClient clients.TrainersClient, trainerNr int, trainersWon bool, wg *sync.WaitGroup) {
 	defer wg.Done()
 	log.Infof("Committing battle results from raid")
 
 	// Update trainer items, removing the items that were used during the battle
-	if err := RemoveUsedItems(trainersClient, *r.playersBattleStatus[trainerNr], r.authTokens[trainerNr], r.lobby.TrainerOutChannels[trainerNr]); err != nil {
+	if err := RemoveUsedItems(&trainersClient, *r.playersBattleStatus[trainerNr], r.authTokens[trainerNr], r.lobby.TrainerOutChannels[trainerNr]); err != nil {
 		log.Error(err)
 	}
 
 	experienceGain := experience.GetPokemonExperienceGainFromRaid(trainersWon)
-	if err := UpdateTrainerPokemons(trainersClient, *r.playersBattleStatus[trainerNr], r.authTokens[trainerNr], r.lobby.TrainerOutChannels[trainerNr], experienceGain); err != nil {
+	if err := UpdateTrainerPokemons(&trainersClient, *r.playersBattleStatus[trainerNr], r.authTokens[trainerNr], r.lobby.TrainerOutChannels[trainerNr], experienceGain); err != nil {
 		log.Error(err)
 	}
 
 	// Update trainer stats: add experience
 	experienceGain = experience.GetTrainerExperienceGainFromBattle(trainersWon)
-	if err := AddExperienceToPlayer(trainersClient, *r.playersBattleStatus[trainerNr], r.authTokens[trainerNr], r.lobby.TrainerOutChannels[trainerNr], experienceGain); err != nil {
+	if err := AddExperienceToPlayer(&trainersClient, *r.playersBattleStatus[trainerNr], r.authTokens[trainerNr], r.lobby.TrainerOutChannels[trainerNr], experienceGain); err != nil {
 		log.Error(err)
 	}
 }

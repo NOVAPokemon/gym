@@ -73,9 +73,8 @@ func (r *RaidInternal) AddPlayer(username string, pokemons map[string]*pokemons.
 	r.playerBattleStatusLocks[trainerNr-1] = sync.Mutex{}
 	r.playersBattleStatus[trainerNr-1] = player
 	r.authTokens[trainerNr-1] = authToken
-	go r.handlePlayerChannel(trainerNr - 1)
-
-	return trainerNr, nil
+	r.handlePlayerChannel(trainerNr - 1)
+	return trainerNr - 1, nil
 }
 
 func (r *RaidInternal) Start() {

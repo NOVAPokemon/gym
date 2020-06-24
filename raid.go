@@ -135,7 +135,9 @@ func (r *RaidInternal) handlePlayerLeave(playerNr int) {
 
 func (r *RaidInternal) finish(trainersWon bool) {
 	close(r.raidOver)
+	log.Info("Waiting for routines handling trainer moves...")
 	r.trainersListenRoutinesWg.Wait()
+	log.Info("Done!")
 	r.commitRaidResults(r.trainersClient, trainersWon)
 	r.sendMsgToAllClients(ws.Finish, []string{})
 	for i := 0; i < ws.GetTrainersJoined(r.lobby); i++ {

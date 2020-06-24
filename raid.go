@@ -140,12 +140,19 @@ func (r *RaidInternal) finish(trainersWon bool) {
 	log.Info("Done!")
 	r.commitRaidResults(r.trainersClient, trainersWon)
 	r.sendMsgToAllClients(ws.Finish, []string{})
+	wg := sync.WaitGroup{}
 	for i := 0; i < ws.GetTrainersJoined(r.lobby); i++ {
-		select {
-		case <-r.lobby.DoneListeningFromConn[i]:
-		case <-time.After(3 * time.Second):
-		}
+		wg.Add(1)
+		trainerNr := i
+		go func() {
+			defer wg.Done()
+			select {
+			case <-r.lobby.DoneListeningFromConn[trainerNr]:
+			case <-time.After(3 * time.Second):
+			}
+		}()
 	}
+	wg.Wait()
 	ws.FinishLobby(r.lobby)
 }
 

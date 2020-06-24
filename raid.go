@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/pkg/errors"
 	"math/rand"
 	"sync"
 	"sync/atomic"
@@ -21,34 +22,34 @@ import (
 )
 
 type RaidInternal struct {
-	trainersClient          *clients.TrainersClient
-	raidBoss                *pokemons.Pokemon
-	lobby                   *ws.Lobby
-	authTokens              []string
-	playerBattleStatusLocks []sync.Mutex
-	playersBattleStatus     []*battles.TrainerBattleStatus
-	bossDefending           bool
-	cooldown                time.Duration
-	failedConnections       int32
-	finishOnce              sync.Once
-	bossLock                sync.Mutex
+	trainersClient           *clients.TrainersClient
+	raidBoss                 *pokemons.Pokemon
+	lobby                    *ws.Lobby
+	authTokens               []string
+	playerBattleStatusLocks  []sync.Mutex
+	playersBattleStatus      []*battles.TrainerBattleStatus
+	bossDefending            bool
+	cooldown                 time.Duration
+	failedConnections        int32
+	bossLock                 sync.Mutex
+	trainersListenRoutinesWg sync.WaitGroup
+	raidOver                 chan struct{}
 }
 
 func NewRaid(raidId primitive.ObjectID, capacity int, raidBoss pokemons.Pokemon, client *clients.TrainersClient, cooldownMilis int) *RaidInternal {
 	return &RaidInternal{
-		failedConnections: 0,
-
-		lobby:                   ws.NewLobby(raidId, capacity),
-		authTokens:              make([]string, capacity),
-		playersBattleStatus:     make([]*battles.TrainerBattleStatus, capacity),
-		playerBattleStatusLocks: make([]sync.Mutex, capacity),
-
-		bossLock:       sync.Mutex{},
-		raidBoss:       &raidBoss,
-		bossDefending:  false,
-		trainersClient: client,
-		cooldown:       time.Duration(cooldownMilis) * time.Millisecond,
-		finishOnce:     sync.Once{},
+		failedConnections:        0,
+		lobby:                    ws.NewLobby(raidId, capacity),
+		authTokens:               make([]string, capacity),
+		playersBattleStatus:      make([]*battles.TrainerBattleStatus, capacity),
+		playerBattleStatusLocks:  make([]sync.Mutex, capacity),
+		trainersListenRoutinesWg: sync.WaitGroup{},
+		bossLock:                 sync.Mutex{},
+		raidBoss:                 &raidBoss,
+		bossDefending:            false,
+		trainersClient:           client,
+		cooldown:                 time.Duration(cooldownMilis) * time.Millisecond,
+		raidOver:                 make(chan struct{}),
 	}
 }
 
@@ -83,7 +84,13 @@ func (r *RaidInternal) Start() {
 		log.Info("Sending Start message")
 		emitRaidStart()
 		r.sendMsgToAllClients(ws.Start, []string{})
-		r.issueBossMoves()
+		trainersWon, err := r.issueBossMoves()
+		if err != nil {
+			r.finish(trainersWon)
+		} else {
+			log.Error(err)
+			ws.FinishLobby(r.lobby)
+		}
 		emitRaidFinish()
 	} else {
 		ws.FinishLobby(r.lobby)
@@ -92,6 +99,8 @@ func (r *RaidInternal) Start() {
 
 func (r *RaidInternal) handlePlayerChannel(i int) {
 	log.Infof("Listening to channel %d", i)
+	r.trainersListenRoutinesWg.Add(1)
+	defer r.trainersListenRoutinesWg.Done()
 	for {
 		select {
 		case msgStr, ok := <-r.lobby.TrainerInChannels[i]:
@@ -105,56 +114,58 @@ func (r *RaidInternal) handlePlayerChannel(i int) {
 			r.playersBattleStatus[i].Cooldown = false
 			r.playersBattleStatus[i].Defending = false
 			r.playerBattleStatusLocks[i].Unlock()
-
 		case <-r.lobby.DoneListeningFromConn[i]:
 			r.handlePlayerLeave(i)
 		case <-r.lobby.DoneWritingToConn[i]:
 			r.handlePlayerLeave(i)
 		case <-r.lobby.Finished:
+			log.Error("handler routine for trainer moves exited unexpectedly")
+			return
+		case <-r.raidOver:
+			log.Info("handler routine for trainer moves exited as expected")
 			return
 		}
 	}
 }
 
 func (r *RaidInternal) handlePlayerLeave(playerNr int) {
-	warn := fmt.Sprintf("An error occurred with user %s", r.playersBattleStatus[playerNr].Username)
-	log.Warn(warn)
-	failedNr := atomic.AddInt32(&r.failedConnections, 1)
-	select {
-	case <-r.lobby.Finished:
-		return
-	default:
-		if ws.GetTrainersJoined(r.lobby) == int(failedNr) {
-			r.finish(false, false)
+	log.Warnf("An error occurred with user %s", r.playersBattleStatus[playerNr].Username)
+	atomic.AddInt32(&r.failedConnections, 1)
+}
+
+func (r *RaidInternal) finish(trainersWon bool) {
+	close(r.raidOver)
+	r.trainersListenRoutinesWg.Wait()
+	r.commitRaidResults(r.trainersClient, trainersWon)
+	r.sendMsgToAllClients(ws.Finish, []string{})
+	for i := 0; i < ws.GetTrainersJoined(r.lobby); i++ {
+		select {
+		case <-r.lobby.DoneListeningFromConn[i]:
+		case <-time.After(3 * time.Second):
 		}
 	}
+	ws.FinishLobby(r.lobby)
 }
 
-func (r *RaidInternal) finish(success bool, trainersWon bool) {
-	r.finishOnce.Do(func() {
-
-		if success {
-			r.commitRaidResults(r.trainersClient, trainersWon)
-		}
-
-		r.sendMsgToAllClients(ws.Finish, []string{})
-		for i := 0; i < ws.GetTrainersJoined(r.lobby); i++ {
-			select {
-			case <-r.lobby.DoneListeningFromConn[i]:
-			case <-time.After(3 * time.Second):
-			}
-		}
-		ws.FinishLobby(r.lobby)
-	})
-}
-
-func (r *RaidInternal) issueBossMoves() {
+func (r *RaidInternal) issueBossMoves() (bool, error) {
 	bossCooldown := 2 * time.Second
 	ticker := time.NewTicker(bossCooldown)
 	<-ticker.C
 	for {
 		select {
 		case <-ticker.C:
+
+			r.bossLock.Lock()
+			if r.raidBoss.HP <= 0 {
+				r.bossLock.Unlock()
+				return true, nil
+			}
+			r.bossLock.Unlock()
+
+			if ws.GetTrainersJoined(r.lobby) == int(r.failedConnections) {
+				return false, errors.New("All trainers left raid")
+			}
+
 			randNr := rand.Float64()
 			var probAttack = 0.5
 			if randNr < probAttack {
@@ -189,9 +200,8 @@ func (r *RaidInternal) issueBossMoves() {
 									}
 									if allTrainersDead {
 										log.Info("All trainers dead, finishing raid")
-										r.finish(true, false)
 										r.playerBattleStatusLocks[i].Unlock()
-										return
+										return false, nil
 									}
 								}
 							}
@@ -207,9 +217,7 @@ func (r *RaidInternal) issueBossMoves() {
 				r.sendMsgToAllClients(battles.Defend, []string{})
 			}
 		case <-r.lobby.Finished:
-			log.Warn(r.lobby.Finished)
-			log.Warn("Routine issuing boss moves exiting...")
-			return
+			log.Warn("Routine issuing boss moves exiting unexpectedly...")
 		}
 	}
 }
@@ -242,14 +250,7 @@ func (r *RaidInternal) handlePlayerMove(msgStr string, issuer *battles.TrainerBa
 	switch message.MsgType {
 	case battles.Attack:
 		r.bossLock.Lock()
-		if changed := battles.HandleAttackMove(issuer, issuerChan, r.bossDefending, r.raidBoss, r.cooldown); changed {
-			if r.raidBoss.HP <= 0 {
-				// raid is finished
-				log.Info("--------------RAID ENDED---------------")
-				log.Info("Winner : players")
-				r.finish(true, true)
-			}
-		}
+		battles.HandleAttackMove(issuer, issuerChan, r.bossDefending, r.raidBoss, r.cooldown)
 		r.bossLock.Unlock()
 	case battles.Defend:
 		battles.HandleDefendMove(issuer, issuerChan, r.cooldown)
@@ -259,7 +260,6 @@ func (r *RaidInternal) handlePlayerMove(msgStr string, issuer *battles.TrainerBa
 			log.Error(err)
 			return
 		}
-
 		useItemMsg := desMsg.(*battles.UseItemMessage)
 		battles.HandleUseItem(useItemMsg, issuer, issuerChan, r.cooldown)
 	case battles.SelectPokemon:
@@ -304,23 +304,23 @@ func (r *RaidInternal) commitRaidResultsForTrainer(trainersClient clients.Traine
 	defer r.playerBattleStatusLocks[trainerNr].Unlock()
 
 	// Update trainer items, removing the items that were used during the battle
-	if err := RemoveUsedItems(&trainersClient, *r.playersBattleStatus[trainerNr], r.authTokens[trainerNr], r.lobby.TrainerOutChannels[trainerNr]); err != nil {
+	if err := RemoveUsedItems(&trainersClient, r.playersBattleStatus[trainerNr], r.authTokens[trainerNr], r.lobby.TrainerOutChannels[trainerNr]); err != nil {
 		log.Error(err)
 	}
 
 	experienceGain := experience.GetPokemonExperienceGainFromRaid(trainersWon)
-	if err := UpdateTrainerPokemons(&trainersClient, *r.playersBattleStatus[trainerNr], r.authTokens[trainerNr], r.lobby.TrainerOutChannels[trainerNr], experienceGain); err != nil {
+	if err := UpdateTrainerPokemons(&trainersClient, r.playersBattleStatus[trainerNr], r.authTokens[trainerNr], r.lobby.TrainerOutChannels[trainerNr], experienceGain); err != nil {
 		log.Error(err)
 	}
 
 	// Update trainer stats: add experience
 	experienceGain = experience.GetTrainerExperienceGainFromBattle(trainersWon)
-	if err := AddExperienceToPlayer(&trainersClient, *r.playersBattleStatus[trainerNr], r.authTokens[trainerNr], r.lobby.TrainerOutChannels[trainerNr], experienceGain); err != nil {
+	if err := AddExperienceToPlayer(&trainersClient, r.playersBattleStatus[trainerNr], r.authTokens[trainerNr], r.lobby.TrainerOutChannels[trainerNr], experienceGain); err != nil {
 		log.Error(err)
 	}
 }
 
-func RemoveUsedItems(trainersClient *clients.TrainersClient, player battles.TrainerBattleStatus,
+func RemoveUsedItems(trainersClient *clients.TrainersClient, player *battles.TrainerBattleStatus,
 	authToken string, outChan chan ws.GenericMsg) error {
 
 	usedItems := player.UsedItems
@@ -351,7 +351,7 @@ func RemoveUsedItems(trainersClient *clients.TrainersClient, player battles.Trai
 	return nil
 }
 
-func UpdateTrainerPokemons(trainersClient *clients.TrainersClient, player battles.TrainerBattleStatus,
+func UpdateTrainerPokemons(trainersClient *clients.TrainersClient, player *battles.TrainerBattleStatus,
 	authToken string, outChan chan ws.GenericMsg, xpAmount float64) error {
 
 	// updates pokemon status after battle: adds XP and updates HP
@@ -386,7 +386,7 @@ func UpdateTrainerPokemons(trainersClient *clients.TrainersClient, player battle
 	return nil
 }
 
-func AddExperienceToPlayer(trainersClient *clients.TrainersClient, player battles.TrainerBattleStatus,
+func AddExperienceToPlayer(trainersClient *clients.TrainersClient, player *battles.TrainerBattleStatus,
 	authToken string, outChan chan ws.GenericMsg, XPAmount float64) error {
 
 	stats := player.TrainerStats

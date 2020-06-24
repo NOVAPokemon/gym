@@ -116,8 +116,10 @@ func (r *RaidInternal) handlePlayerChannel(i int) {
 			r.playerBattleStatusLocks[i].Unlock()
 		case <-r.lobby.DoneListeningFromConn[i]:
 			r.handlePlayerLeave(i)
+			return
 		case <-r.lobby.DoneWritingToConn[i]:
 			r.handlePlayerLeave(i)
+			return
 		case <-r.lobby.Finished:
 			log.Error("handler routine for trainer moves exited unexpectedly")
 			return

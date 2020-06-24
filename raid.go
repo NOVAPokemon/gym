@@ -133,6 +133,7 @@ func (r *RaidInternal) handlePlayerLeave(playerNr int) {
 
 func (r *RaidInternal) finish(success bool, trainersWon bool) {
 	r.finishOnce.Do(func() {
+
 		if success {
 			r.commitRaidResults(r.trainersClient, trainersWon)
 		}
@@ -300,6 +301,8 @@ func (r *RaidInternal) commitRaidResults(trainersClient *clients.TrainersClient,
 func (r *RaidInternal) commitRaidResultsForTrainer(trainersClient clients.TrainersClient, trainerNr int, trainersWon bool, wg *sync.WaitGroup) {
 	defer wg.Done()
 	log.Infof("Committing battle results from raid")
+	r.playerBattleStatusLocks[trainerNr].Lock()
+	r.playerBattleStatusLocks[trainerNr].Unlock()
 
 	// Update trainer items, removing the items that were used during the battle
 	if err := RemoveUsedItems(&trainersClient, *r.playersBattleStatus[trainerNr], r.authTokens[trainerNr], r.lobby.TrainerOutChannels[trainerNr]); err != nil {

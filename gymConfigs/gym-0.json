@@ -1,23 +1,17 @@
 [
   {
     "name": "server0-gym1",
-    "location": {
-      "latitude": 0.5,
-      "longitude": 0.5
-    }
+    "latitude": 0.5,
+    "longitude": 0.5
   },
   {
     "name": "server0-gym2",
-    "location": {
-      "latitude": -0.5,
-      "longitude": -0.5
-    }
+    "latitude": -0.5,
+    "longitude": -0.5
   },
   {
     "name": "server0-gym3",
-    "location": {
-      "latitude": 0.5,
-      "longitude": -0.5
-    }
+    "latitude": 0.5,
+    "longitude": -0.5
   }
 ]

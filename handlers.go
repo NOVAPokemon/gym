@@ -20,6 +20,7 @@ import (
 	"github.com/NOVAPokemon/utils/pokemons"
 	"github.com/NOVAPokemon/utils/tokens"
 	"github.com/NOVAPokemon/utils/websockets"
+	"github.com/golang/geo/s2"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 	log "github.com/sirupsen/logrus"
@@ -140,8 +141,13 @@ func loadConfig() (*GymServerConfig, error) {
 }
 
 func loadGymsToDb() error {
-	files, err := ioutil.ReadDir(GymConfigsFolder)
+	type GymInDegrees struct {
+		Name        string `json:"name" bson:"name,omitempty"`
+		Latitude    float64
+		Longitude   float64
+	}
 
+	files, err := ioutil.ReadDir(GymConfigsFolder)
 	if err != nil {
 		return wrapLoadGymsToDBError(err)
 	}
@@ -156,14 +162,21 @@ func loadGymsToDb() error {
 			return wrapLoadGymsToDBError(err)
 		}
 
-		var gyms []utils.Gym
+		var gyms []GymInDegrees
 		if err = json.Unmarshal(fileData, &gyms); err != nil {
 			return wrapLoadGymsToDBError(err)
 		}
 
-		serverName := strings.TrimSuffix(file.Name(), ".json")
+		gymsInLatLng := make([]utils.Gym, len(gyms))
+		for i, gym := range gyms {
+			gymsInLatLng[i] = utils.Gym{
+				Name:        gym.Name,
+				Location:    s2.LatLngFromDegrees(gym.Latitude, gym.Longitude),
+			}
+		}
 
-		for _, gym := range gyms {
+		serverName := strings.TrimSuffix(file.Name(), ".json")
+		for _, gym := range gymsInLatLng {
 			gymsForServer := utils.GymWithServer{
 				Gym:        gym,
 				ServerName: serverName,
@@ -175,6 +188,7 @@ func loadGymsToDb() error {
 		}
 		log.Infof("Loaded gyms to database for server %s", serverName)
 	}
+
 	return nil
 }
 

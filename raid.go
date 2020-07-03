@@ -87,10 +87,10 @@ func (r *RaidInternal) Start() {
 		r.sendMsgToAllClients(ws.Start, []string{})
 		trainersWon, err := r.issueBossMoves()
 		if err != nil {
-			r.finish(trainersWon)
-		} else {
 			log.Error(err)
 			ws.FinishLobby(r.lobby)
+		} else {
+			r.finish(trainersWon)
 		}
 		emitRaidFinish()
 	} else {

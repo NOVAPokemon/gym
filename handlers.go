@@ -87,7 +87,7 @@ func init() {
 	for i := 0; i < 5; i++ {
 		time.Sleep(time.Duration(5*i) * time.Second)
 
-		gymsWithSrv, err := loadGymsFromDB()
+		err := loadGymsFromDBForServer(serverName)
 		if err != nil {
 			log.Error(err)
 			if serverNr == 0 {
@@ -95,15 +95,28 @@ func init() {
 				err := loadGymsToDb()
 				if err != nil {
 					log.Error(WrapInit(err))
+					continue
 				}
+
+				gymsWithSrv, err := getGymsFromDB()
+				if err != nil {
+					log.Error(WrapInit(err))
+					continue
+				}
+
+				err = registerGyms(gymsWithSrv)
+				if err != nil {
+					log.Error(WrapInit(err))
+					continue
+				}
+
+				i--
 			}
 		} else {
-			err := registerGyms(gymsWithSrv)
-			log.Error(WrapInit(err))
-
 			go logGymsPeriodic()
 			return
 		}
+
 	}
 
 	panic("Could not load gyms")
@@ -189,7 +202,7 @@ func loadGymsToDb() error {
 	return nil
 }
 
-func loadGymsFromDB() ([]utils.GymWithServer, error) {
+func getGymsFromDB() ([]utils.GymWithServer, error) {
 	gymsWithSrv, err := gymDb.GetAllGyms()
 	if err != nil {
 		return nil, wrapLoadGymsFromDBError(err)
@@ -198,12 +211,27 @@ func loadGymsFromDB() ([]utils.GymWithServer, error) {
 	return gymsWithSrv, nil
 }
 
-func registerGyms(gymsWithSrv []utils.GymWithServer) error {
+func loadGymsFromDBForServer(serverName string) error {
+	gymsWithSrv, err := gymDb.GetGymsForServer(serverName)
+	if err != nil {
+		return wrapLoadGymsFromDBError(err)
+	}
+
 	for _, gymWithSrv := range gymsWithSrv {
 		newGymInternal := GymInternal{
 			Gym:  gymWithSrv.Gym,
 			raid: nil,
 		}
+
+		gyms.Store(gymWithSrv.Gym.Name, newGymInternal)
+		go refreshRaidBossPeriodic(gymWithSrv.Gym.Name)
+	}
+
+	return nil
+}
+
+func registerGyms(gymsWithSrv []utils.GymWithServer) error {
+	for _, gymWithSrv := range gymsWithSrv {
 		gymWithServer := utils.GymWithServer{
 			ServerName: fmt.Sprintf("%s.%s", gymWithSrv.ServerName, serviceNameHeadless),
 			Gym:        gymWithSrv.Gym,
@@ -216,9 +244,6 @@ func registerGyms(gymsWithSrv []utils.GymWithServer) error {
 		}
 
 		log.Info("Done!")
-
-		gyms.Store(gymWithSrv.Gym.Name, newGymInternal)
-		go refreshRaidBossPeriodic(gymWithSrv.Gym.Name)
 	}
 
 	return nil

@@ -118,7 +118,7 @@ func init() {
 
 func refreshGymsPeriodic() {
 	for {
-		err := loadGymsFromDBForServer(serverName)
+		_, err := loadGymsFromDBForServer(serverName)
 		if err != nil {
 			panic(err)
 		}

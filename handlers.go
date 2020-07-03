@@ -101,15 +101,8 @@ func init() {
 			return
 		}
 	}
-	size := 0
-	gyms.Range(func(key, value interface{}) bool {
-		size++
-		return false
-	})
 
-	if size == 0 {
-		panic("Could not load gyms")
-	}
+	panic("Could not load gyms")
 }
 
 func logGymsPeriodic() {
@@ -142,9 +135,9 @@ func loadConfig() (*GymServerConfig, error) {
 
 func loadGymsToDb() error {
 	type GymInDegrees struct {
-		Name        string `json:"name" bson:"name,omitempty"`
-		Latitude    float64
-		Longitude   float64
+		Name      string `json:"name" bson:"name,omitempty"`
+		Latitude  float64
+		Longitude float64
 	}
 
 	files, err := ioutil.ReadDir(GymConfigsFolder)
@@ -170,8 +163,8 @@ func loadGymsToDb() error {
 		gymsInLatLng := make([]utils.Gym, len(gyms))
 		for i, gym := range gyms {
 			gymsInLatLng[i] = utils.Gym{
-				Name:        gym.Name,
-				Location:    s2.LatLngFromDegrees(gym.Latitude, gym.Longitude),
+				Name:     gym.Name,
+				Location: s2.LatLngFromDegrees(gym.Latitude, gym.Longitude),
 			}
 		}
 

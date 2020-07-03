@@ -87,7 +87,7 @@ func init() {
 	for i := 0; i < 5; i++ {
 		time.Sleep(time.Duration(5*i) * time.Second)
 
-		err = loadGymsFromDBForServer(serverName)
+		gymsLoaded, err := loadGymsFromDBForServer(serverName)
 		if err != nil {
 			log.Warn(err)
 			if serverNr == 0 {
@@ -97,22 +97,16 @@ func init() {
 					log.Error(WrapInit(err))
 					continue
 				}
-				var gymsWithSrv []utils.GymWithServer
-				gymsWithSrv, err = getGymsFromDB()
-				if err != nil {
-					log.Error(WrapInit(err))
-					continue
-				}
-
-				err = registerGyms(gymsWithSrv)
-				if err != nil {
-					log.Error(WrapInit(err))
-					continue
-				}
 
 				i--
 			}
 		} else {
+			err = registerGyms(gymsLoaded)
+			if err != nil {
+				log.Error(WrapInit(err))
+				continue
+			}
+
 			go refreshGymsPeriodic()
 			return
 		}
@@ -211,10 +205,10 @@ func getGymsFromDB() ([]utils.GymWithServer, error) {
 	return gymsWithSrv, nil
 }
 
-func loadGymsFromDBForServer(serverName string) error {
+func loadGymsFromDBForServer(serverName string) ([]utils.GymWithServer, error) {
 	gymsWithSrv, err := gymDb.GetGymsForServer(serverName)
 	if err != nil {
-		return wrapLoadGymsFromDBError(err)
+		return nil, wrapLoadGymsFromDBError(err)
 	}
 
 	for _, gymWithSrv := range gymsWithSrv {
@@ -228,7 +222,7 @@ func loadGymsFromDBForServer(serverName string) error {
 		}
 	}
 
-	return nil
+	return gymsWithSrv, nil
 }
 
 func registerGyms(gymsWithSrv []utils.GymWithServer) error {

@@ -86,7 +86,8 @@ func init() {
 
 	for i := 0; i < 5; i++ {
 		time.Sleep(time.Duration(5*i) * time.Second)
-		err = loadGymsFromDb(serverName)
+
+		gymsWithSrv, err := loadGymsFromDB()
 		if err != nil {
 			log.Error(err)
 			if serverNr == 0 {
@@ -97,6 +98,9 @@ func init() {
 				}
 			}
 		} else {
+			err := registerGyms(gymsWithSrv)
+			log.Error(WrapInit(err))
+
 			go logGymsPeriodic()
 			return
 		}
@@ -185,11 +189,16 @@ func loadGymsToDb() error {
 	return nil
 }
 
-func loadGymsFromDb(serverName string) error {
-	gymsWithSrv, err := gymDb.GetGymsForServer(serverName)
+func loadGymsFromDB() ([]utils.GymWithServer, error) {
+	gymsWithSrv, err := gymDb.GetAllGyms()
 	if err != nil {
-		return wrapLoadGymsFromDBError(err)
+		return nil, wrapLoadGymsFromDBError(err)
 	}
+
+	return gymsWithSrv, nil
+}
+
+func registerGyms(gymsWithSrv []utils.GymWithServer) error {
 	for _, gymWithSrv := range gymsWithSrv {
 		newGymInternal := GymInternal{
 			Gym:  gymWithSrv.Gym,
@@ -201,15 +210,17 @@ func loadGymsFromDb(serverName string) error {
 		}
 
 		log.Infof("Registering gym %s with location server", gymWithSrv.Gym.Name)
-		err = locationClient.AddGymLocation(gymWithServer)
+		err := locationClient.AddGymLocation(gymWithServer)
 		if err != nil {
 			return wrapLoadGymsFromDBError(err)
 		}
+
 		log.Info("Done!")
 
 		gyms.Store(gymWithSrv.Gym.Name, newGymInternal)
 		go refreshRaidBossPeriodic(gymWithSrv.Gym.Name)
 	}
+
 	return nil
 }
 

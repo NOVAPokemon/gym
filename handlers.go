@@ -302,7 +302,7 @@ func handleCreateRaid(w http.ResponseWriter, r *http.Request) {
 
 	if gymInternal.raid != nil {
 		err := wrapCreateRaidError(newRaidAlreadyExistsError(gymId))
-		utils.LogAndSendHTTPError(&w, err, http.StatusConflict)
+		utils.LogWarnAndSendHTTPError(&w, err, http.StatusConflict)
 		return
 	}
 

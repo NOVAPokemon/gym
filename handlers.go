@@ -35,7 +35,7 @@ type (
 	gymsMapType = gymInternalType
 )
 
-//pokemonsFile taken from https://raw.githubusercontent.com/sindresorhus/pokemon/master/data/en.json
+// pokemonsFile taken from https://raw.githubusercontent.com/sindresorhus/pokemon/master/data/en.json
 const pokemonsFile = "pokemons.json"
 const configFilename = "configs.json"
 
@@ -113,7 +113,7 @@ func init() {
 				i--
 			}
 		} else {
-			go logGymsPeriodic()
+			go refreshGymsPeriodic()
 			return
 		}
 
@@ -122,8 +122,13 @@ func init() {
 	panic("Could not load gyms")
 }
 
-func logGymsPeriodic() {
+func refreshGymsPeriodic() {
 	for {
+		err := loadGymsFromDBForServer(serverName)
+		if err != nil {
+			panic(err)
+		}
+
 		log.Info("Active gyms:")
 		gyms.Range(func(key, value interface{}) bool {
 			log.Infof("Gym name: %s, Gym: %+v", key, value)
@@ -218,8 +223,9 @@ func loadGymsFromDBForServer(serverName string) error {
 			raid: nil,
 		}
 
-		gyms.Store(gymWithSrv.Gym.Name, newGymInternal)
-		go refreshRaidBossPeriodic(gymWithSrv.Gym.Name)
+		if _, loaded := gyms.LoadOrStore(gymWithSrv.Gym.Name, newGymInternal); !loaded {
+			go refreshRaidBossPeriodic(gymWithSrv.Gym.Name)
+		}
 	}
 
 	return nil
@@ -261,7 +267,7 @@ func handleCreateGym(w http.ResponseWriter, r *http.Request) {
 	go refreshRaidBossPeriodic(gym.Name)
 
 	gymWithServer := utils.GymWithServer{
-		ServerName: serverName,
+		ServerName: fmt.Sprintf("%s.%s", serverName, serviceNameHeadless),
 		Gym:        gym,
 	}
 

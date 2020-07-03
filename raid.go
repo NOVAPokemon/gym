@@ -303,14 +303,14 @@ func (r *RaidInternal) commitRaidResults(trainersClient *clients.TrainersClient,
 		default:
 			wg.Add(1)
 			trainerNr := i
-			trainersClientCopy := *trainersClient
-			go r.commitRaidResultsForTrainer(trainersClientCopy, trainerNr, playersWon, &wg)
+			tempClient := clients.NewTrainersClient(trainersClient.HttpClient)
+			go r.commitRaidResultsForTrainer(tempClient, trainerNr, playersWon, &wg)
 		}
 	}
 	wg.Wait()
 }
 
-func (r *RaidInternal) commitRaidResultsForTrainer(trainersClient clients.TrainersClient, trainerNr int,
+func (r *RaidInternal) commitRaidResultsForTrainer(trainersClient *clients.TrainersClient, trainerNr int,
 	trainersWon bool, wg *sync.WaitGroup) {
 	defer wg.Done()
 	log.Infof("Committing battle results from raid")
@@ -334,7 +334,7 @@ func (r *RaidInternal) commitRaidResultsForTrainer(trainersClient clients.Traine
 	}
 }
 
-func RemoveUsedItems(trainersClient clients.TrainersClient, player *battles.TrainerBattleStatus,
+func RemoveUsedItems(trainersClient *clients.TrainersClient, player *battles.TrainerBattleStatus,
 	authToken string, outChan chan ws.GenericMsg) error {
 
 	usedItems := player.UsedItems
@@ -365,7 +365,7 @@ func RemoveUsedItems(trainersClient clients.TrainersClient, player *battles.Trai
 	return nil
 }
 
-func UpdateTrainerPokemons(trainersClient clients.TrainersClient, player *battles.TrainerBattleStatus,
+func UpdateTrainerPokemons(trainersClient *clients.TrainersClient, player *battles.TrainerBattleStatus,
 	authToken string, outChan chan ws.GenericMsg, xpAmount float64) error {
 
 	// updates pokemon status after battle: adds XP and updates HP
@@ -400,7 +400,7 @@ func UpdateTrainerPokemons(trainersClient clients.TrainersClient, player *battle
 	return nil
 }
 
-func AddExperienceToPlayer(trainersClient clients.TrainersClient, player *battles.TrainerBattleStatus,
+func AddExperienceToPlayer(trainersClient *clients.TrainersClient, player *battles.TrainerBattleStatus,
 	authToken string, outChan chan ws.GenericMsg, XPAmount float64) error {
 
 	stats := player.TrainerStats

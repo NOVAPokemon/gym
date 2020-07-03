@@ -89,7 +89,7 @@ func init() {
 
 		err = loadGymsFromDBForServer(serverName)
 		if err != nil {
-			log.Error(err)
+			log.Warn(err)
 			if serverNr == 0 {
 				// if configs are missing, server 0 adds them
 				err = loadGymsToDb()

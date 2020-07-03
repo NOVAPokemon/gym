@@ -28,15 +28,15 @@ import (
 )
 
 const (
-	GymConfigsFolder = "gymConfigs"
+	gymConfigsFolder = "gymConfigs"
 )
 
 type (
-	gymsMapType = GymInternal
+	gymsMapType = gymInternalType
 )
 
-// Pokemons taken from https://raw.githubusercontent.com/sindresorhus/pokemon/master/data/en.json
-const PokemonsFile = "pokemons.json"
+//pokemonsFile taken from https://raw.githubusercontent.com/sindresorhus/pokemon/master/data/en.json
+const pokemonsFile = "pokemons.json"
 const configFilename = "configs.json"
 
 var (
@@ -50,7 +50,7 @@ var (
 	serviceNameHeadless string
 )
 
-type GymInternal struct {
+type gymInternalType struct {
 	Gym  utils.Gym
 	raid *RaidInternal
 }
@@ -69,7 +69,7 @@ func init() {
 	if pokemonSpecies, err = loadPokemonSpecies(); err != nil {
 		log.Fatal(err)
 	}
-	if config, err = loadConfig(); err != nil {
+	if err = loadConfig(); err != nil {
 		log.Fatal(err)
 	}
 
@@ -87,18 +87,18 @@ func init() {
 	for i := 0; i < 5; i++ {
 		time.Sleep(time.Duration(5*i) * time.Second)
 
-		err := loadGymsFromDBForServer(serverName)
+		err = loadGymsFromDBForServer(serverName)
 		if err != nil {
 			log.Error(err)
 			if serverNr == 0 {
 				// if configs are missing, server 0 adds them
-				err := loadGymsToDb()
+				err = loadGymsToDb()
 				if err != nil {
 					log.Error(WrapInit(err))
 					continue
 				}
-
-				gymsWithSrv, err := getGymsFromDB()
+				var gymsWithSrv []utils.GymWithServer
+				gymsWithSrv, err = getGymsFromDB()
 				if err != nil {
 					log.Error(WrapInit(err))
 					continue
@@ -133,32 +133,27 @@ func logGymsPeriodic() {
 	}
 }
 
-func loadConfig() (*GymServerConfig, error) {
+func loadConfig() error {
 	fileData, err := ioutil.ReadFile(configFilename)
 	if err != nil {
-		return nil, utils.WrapErrorLoadConfigs(err)
+		return utils.WrapErrorLoadConfigs(err)
 	}
-
-	var config GymServerConfig
 	err = json.Unmarshal(fileData, &config)
 	if err != nil {
-		return nil, utils.WrapErrorLoadConfigs(err)
+		return utils.WrapErrorLoadConfigs(err)
 	}
-
 	log.Infof("Loaded config: %+v", config)
-
-	return &config, nil
+	return nil
 }
 
-func loadGymsToDb() error {
-	type GymInDegrees struct {
+func loadGymsToDb() (err error) {
+	type gymInDegrees struct {
 		Name      string `json:"name" bson:"name,omitempty"`
 		Latitude  float64
 		Longitude float64
 	}
-
-	files, err := ioutil.ReadDir(GymConfigsFolder)
-	if err != nil {
+	var files []os.FileInfo
+	if files, err = ioutil.ReadDir(gymConfigsFolder); err != nil {
 		return wrapLoadGymsToDBError(err)
 	}
 
@@ -167,36 +162,36 @@ func loadGymsToDb() error {
 			continue
 		}
 		log.Infof("Doing file: %s", file.Name())
-		fileData, err := ioutil.ReadFile(fmt.Sprintf("%s/%s", GymConfigsFolder, file.Name()))
-		if err != nil {
+		var fileData []byte
+		if fileData, err = ioutil.ReadFile(fmt.Sprintf("%s/%s", gymConfigsFolder, file.Name())); err != nil {
 			return wrapLoadGymsToDBError(err)
 		}
 
-		var gyms []GymInDegrees
-		if err = json.Unmarshal(fileData, &gyms); err != nil {
+		var gymsInFile []gymInDegrees
+		if err = json.Unmarshal(fileData, &gymsInFile); err != nil {
 			return wrapLoadGymsToDBError(err)
 		}
 
-		gymsInLatLng := make([]utils.Gym, len(gyms))
-		for i, gym := range gyms {
+		gymsInLatLng := make([]utils.Gym, len(gymsInFile))
+		for i, gym := range gymsInFile {
 			gymsInLatLng[i] = utils.Gym{
 				Name:     gym.Name,
 				Location: s2.LatLngFromDegrees(gym.Latitude, gym.Longitude),
 			}
 		}
 
-		serverName := strings.TrimSuffix(file.Name(), ".json")
+		currServerName := strings.TrimSuffix(file.Name(), ".json")
 		for _, gym := range gymsInLatLng {
 			gymsForServer := utils.GymWithServer{
 				Gym:        gym,
-				ServerName: serverName,
+				ServerName: currServerName,
 			}
 			if err = gymDb.AddGymWithServer(gymsForServer); err != nil {
 				return wrapLoadGymsToDBError(err)
 			}
 			log.Infof("Loaded gym to database: %s", gym.Name)
 		}
-		log.Infof("Loaded gyms to database for server %s", serverName)
+		log.Infof("Loaded gyms to database for server %s", currServerName)
 	}
 
 	return nil
@@ -218,7 +213,7 @@ func loadGymsFromDBForServer(serverName string) error {
 	}
 
 	for _, gymWithSrv := range gymsWithSrv {
-		newGymInternal := GymInternal{
+		newGymInternal := gymInternalType{
 			Gym:  gymWithSrv.Gym,
 			raid: nil,
 		}
@@ -258,7 +253,7 @@ func handleCreateGym(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	newGymInternal := GymInternal{
+	newGymInternal := gymInternalType{
 		Gym:  gym,
 		raid: nil,
 	}
@@ -408,7 +403,7 @@ func handleJoinRaid(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func handleRaidStart(gymId string, gym GymInternal) {
+func handleRaidStart(gymId string, gym gymInternalType) {
 	startTimer := time.NewTimer(time.Duration(config.TimeToStartRaid) * time.Millisecond)
 	<-startTimer.C
 	go gym.raid.Start()
@@ -446,7 +441,7 @@ func refreshRaidBossPeriodic(gymName string) {
 		log.Infof("Routine generating raidboss for %s exiting", gymName)
 		return
 	}
-	gymInternal := value.(GymInternal)
+	gymInternal := value.(gymInternalType)
 	gymInternal.Gym.RaidBoss = pokemons.GenerateRaidBoss(config.MaxLevel, config.StdHpDeviation, config.MaxHP,
 		config.StdDamageDeviation, config.MaxDamage, pokemonSpecies[rand.Intn(len(pokemonSpecies))-1])
 	gyms.Store(gymName, gymInternal)
@@ -456,12 +451,12 @@ func refreshRaidBossPeriodic(gymName string) {
 	for {
 		select {
 		case <-ticker.C:
-			value, ok := gyms.Load(gymName)
+			value, ok = gyms.Load(gymName)
 			if !ok {
 				log.Infof("Routine generating raidboss for %s exiting", gymName)
 				return
 			}
-			gymInternal := value.(GymInternal)
+			gymInternal = value.(gymInternalType)
 			gymInternal.Gym.RaidBoss = pokemons.GenerateRaidBoss(config.MaxLevel, config.StdHpDeviation, config.MaxHP,
 				config.StdDamageDeviation, config.MaxDamage, pokemonSpecies[rand.Intn(len(pokemonSpecies))-1])
 			gyms.Store(gymName, gymInternal)
@@ -538,7 +533,7 @@ func extractAndVerifyTokensForBattle(trainersClient *clients.TrainersClient, use
 }
 
 func loadPokemonSpecies() ([]string, error) {
-	data, err := ioutil.ReadFile(PokemonsFile)
+	data, err := ioutil.ReadFile(pokemonsFile)
 	if err != nil {
 		return nil, wrapLoadSpecies(err)
 	}

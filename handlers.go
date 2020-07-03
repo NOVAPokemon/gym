@@ -196,15 +196,6 @@ func loadGymsToDb() (err error) {
 	return nil
 }
 
-func getGymsFromDB() ([]utils.GymWithServer, error) {
-	gymsWithSrv, err := gymDb.GetAllGyms()
-	if err != nil {
-		return nil, wrapLoadGymsFromDBError(err)
-	}
-
-	return gymsWithSrv, nil
-}
-
 func loadGymsFromDBForServer(serverName string) ([]utils.GymWithServer, error) {
 	gymsWithSrv, err := gymDb.GetGymsForServer(serverName)
 	if err != nil {

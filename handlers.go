@@ -23,6 +23,7 @@ import (
 	"github.com/golang/geo/s2"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
+	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
@@ -387,7 +388,11 @@ func handleJoinRaid(w http.ResponseWriter, r *http.Request) {
 
 	_, err = gymInternal.raid.addPlayer(authToken.Username, pokemonsForBattle, statsToken, trainerItems, conn, r.Header.Get(tokens.AuthTokenHeaderName))
 	if err != nil {
-		log.Error(wrapJoinRaidError(err))
+		if errors.Cause(err) == websockets.ErrorLobbyIsFull {
+			log.Warn(wrapJoinRaidError(err))
+		} else {
+			log.Error(wrapJoinRaidError(err))
+		}
 		err = writeErrorMessageAndClose(conn, err)
 		if err != nil {
 			log.Error(wrapJoinRaidError(err))

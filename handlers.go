@@ -548,7 +548,11 @@ func loadPokemonSpecies() ([]string, error) {
 }
 
 func writeErrorMessageAndClose(conn *websocket.Conn, err error) error {
-	err = conn.WriteMessage(websocket.TextMessage, []byte(err.Error()))
+	data := []byte(websockets.ErrorMessage{
+		Info:  err.Error(),
+		Fatal: false,
+	}.SerializeToWSMessage().Serialize())
+	err = conn.WriteMessage(websocket.TextMessage, data)
 	if err != nil {
 		return websockets.WrapWritingMessageError(err)
 	}

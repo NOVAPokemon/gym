@@ -1,6 +1,6 @@
 package main
 
-type GymServerConfig struct {
+type gymServerConfig struct {
 	DefaultCooldown    int // milliseconds
 	TimeToStartRaid    int // milliseconds
 	PokemonsPerRaid    int

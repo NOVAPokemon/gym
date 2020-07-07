@@ -7,40 +7,44 @@ import (
 	"github.com/NOVAPokemon/utils/api"
 )
 
-const CreateRaidName = "CREATE_RAID"
-const JoinRaidName = "JOIN_RAID"
-const GetGymInfoName = "GET_GYM_INFO"
-const CreateGymName = "CREATE_GYM"
+const (
+	createRaidName = "CREATE_RAID"
+	joinRaidName   = "JOIN_RAID"
+	getGymInfoName = "GET_GYM_INFO"
+	createGymName  = "CREATE_GYM"
+)
 
-const GET = "GET"
-const POST = "POST"
+const (
+	get  = "GET"
+	post = "POST"
+)
 
 var routes = utils.Routes{
 	api.GenStatusRoute(strings.ToLower(serviceName)),
 	utils.Route{
-		Name:        CreateRaidName,
-		Method:      POST,
+		Name:        createRaidName,
+		Method:      post,
 		Pattern:     api.CreateRaidRoute,
 		HandlerFunc: handleCreateRaid,
 	},
 
 	utils.Route{
-		Name:        JoinRaidName,
-		Method:      GET,
+		Name:        joinRaidName,
+		Method:      get,
 		Pattern:     api.JoinRaidRoute,
 		HandlerFunc: handleJoinRaid,
 	},
 
 	utils.Route{
-		Name:        GetGymInfoName,
-		Method:      GET,
+		Name:        getGymInfoName,
+		Method:      get,
 		Pattern:     api.GetGymInfoRoute,
 		HandlerFunc: handleGetGymInfo,
 	},
 
 	utils.Route{
-		Name:        CreateGymName,
-		Method:      POST,
+		Name:        createGymName,
+		Method:      post,
 		Pattern:     api.CreateGymRoute,
 		HandlerFunc: handleCreateGym,
 	},

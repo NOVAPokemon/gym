@@ -22,7 +22,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
-type RaidInternal struct {
+type raidInternal struct {
 	trainersClient           *clients.TrainersClient
 	raidBoss                 *pokemons.Pokemon
 	lobby                    *ws.Lobby
@@ -37,8 +37,8 @@ type RaidInternal struct {
 	raidOver                 chan struct{}
 }
 
-func NewRaid(raidId primitive.ObjectID, capacity int, raidBoss pokemons.Pokemon, client *clients.TrainersClient, cooldownMilis int) *RaidInternal {
-	return &RaidInternal{
+func newRaid(raidId primitive.ObjectID, capacity int, raidBoss pokemons.Pokemon, client *clients.TrainersClient, cooldownMilis int) *raidInternal {
+	return &raidInternal{
 		failedConnections:        0,
 		lobby:                    ws.NewLobby(raidId, capacity),
 		authTokens:               make([]string, capacity),
@@ -54,7 +54,7 @@ func NewRaid(raidId primitive.ObjectID, capacity int, raidBoss pokemons.Pokemon,
 	}
 }
 
-func (r *RaidInternal) AddPlayer(username string, pokemons map[string]*pokemons.Pokemon, stats *utils.TrainerStats,
+func (r *raidInternal) addPlayer(username string, pokemons map[string]*pokemons.Pokemon, stats *utils.TrainerStats,
 	trainerItems map[string]items.Item, trainerConn *websocket.Conn, authToken string) (int, error) {
 	trainerNr, err := ws.AddTrainer(r.lobby, username, trainerConn)
 	if err != nil {
@@ -79,7 +79,7 @@ func (r *RaidInternal) AddPlayer(username string, pokemons map[string]*pokemons.
 	return trainerNr - 1, nil
 }
 
-func (r *RaidInternal) Start() {
+func (r *raidInternal) start() {
 	ws.StartLobby(r.lobby)
 	if ws.GetTrainersJoined(r.lobby) > 0 {
 		log.Info("Sending Start message")
@@ -98,7 +98,7 @@ func (r *RaidInternal) Start() {
 	}
 }
 
-func (r *RaidInternal) handlePlayerChannel(i int) {
+func (r *raidInternal) handlePlayerChannel(i int) {
 	log.Infof("Listening to channel %d", i)
 	r.trainersListenRoutinesWg.Add(1)
 	defer r.trainersListenRoutinesWg.Done()
@@ -131,12 +131,12 @@ func (r *RaidInternal) handlePlayerChannel(i int) {
 	}
 }
 
-func (r *RaidInternal) handlePlayerLeave(playerNr int) {
+func (r *raidInternal) handlePlayerLeave(playerNr int) {
 	log.Warnf("An error occurred with user %s", r.playersBattleStatus[playerNr].Username)
 	atomic.AddInt32(&r.failedConnections, 1)
 }
 
-func (r *RaidInternal) finish(trainersWon bool) {
+func (r *raidInternal) finish(trainersWon bool) {
 	close(r.raidOver)
 	log.Info("Waiting for routines handling trainer moves...")
 	r.trainersListenRoutinesWg.Wait()
@@ -159,7 +159,7 @@ func (r *RaidInternal) finish(trainersWon bool) {
 	ws.FinishLobby(r.lobby)
 }
 
-func (r *RaidInternal) issueBossMoves() (bool, error) {
+func (r *raidInternal) issueBossMoves() (bool, error) {
 	bossCooldown := 2 * time.Second
 	ticker := time.NewTicker(bossCooldown)
 	<-ticker.C
@@ -234,7 +234,7 @@ func (r *RaidInternal) issueBossMoves() (bool, error) {
 	}
 }
 
-func (r *RaidInternal) sendMsgToAllClients(msgType string, msgArgs []string) {
+func (r *raidInternal) sendMsgToAllClients(msgType string, msgArgs []string) {
 	toSend := ws.Message{MsgType: msgType, MsgArgs: msgArgs}
 	for i := 0; i < ws.GetTrainersJoined(r.lobby); i++ {
 		select {
@@ -248,7 +248,7 @@ func (r *RaidInternal) sendMsgToAllClients(msgType string, msgArgs []string) {
 	}
 }
 
-func (r *RaidInternal) handlePlayerMove(msgStr string, issuer *battles.TrainerBattleStatus, issuerChan chan ws.GenericMsg) {
+func (r *raidInternal) handlePlayerMove(msgStr string, issuer *battles.TrainerBattleStatus, issuerChan chan ws.GenericMsg) {
 	message, err := ws.ParseMessage(msgStr)
 	if err != nil {
 		errMsg := ws.Message{MsgType: ws.Error, MsgArgs: []string{ws.ErrorInvalidMessageFormat.Error()}}
@@ -259,6 +259,8 @@ func (r *RaidInternal) handlePlayerMove(msgStr string, issuer *battles.TrainerBa
 		return
 	}
 
+	var desMsg ws.Serializable
+
 	switch message.MsgType {
 	case battles.Attack:
 		r.bossLock.Lock()
@@ -267,7 +269,7 @@ func (r *RaidInternal) handlePlayerMove(msgStr string, issuer *battles.TrainerBa
 	case battles.Defend:
 		battles.HandleDefendMove(issuer, issuerChan, r.cooldown)
 	case battles.UseItem:
-		desMsg, err := battles.DeserializeBattleMsg(message)
+		desMsg, err = battles.DeserializeBattleMsg(message)
 		if err != nil {
 			log.Error(err)
 			return
@@ -275,7 +277,7 @@ func (r *RaidInternal) handlePlayerMove(msgStr string, issuer *battles.TrainerBa
 		useItemMsg := desMsg.(*battles.UseItemMessage)
 		battles.HandleUseItem(useItemMsg, issuer, issuerChan, r.cooldown)
 	case battles.SelectPokemon:
-		desMsg, err := battles.DeserializeBattleMsg(message)
+		desMsg, err = battles.DeserializeBattleMsg(message)
 		if err != nil {
 			log.Error(err)
 			return
@@ -293,7 +295,7 @@ func (r *RaidInternal) handlePlayerMove(msgStr string, issuer *battles.TrainerBa
 	}
 }
 
-func (r *RaidInternal) commitRaidResults(trainersClient *clients.TrainersClient, playersWon bool) {
+func (r *raidInternal) commitRaidResults(trainersClient *clients.TrainersClient, playersWon bool) {
 	log.Infof("Committing battle results from raid")
 	var wg sync.WaitGroup
 	for i := 0; i < ws.GetTrainersJoined(r.lobby); i++ {
@@ -310,7 +312,7 @@ func (r *RaidInternal) commitRaidResults(trainersClient *clients.TrainersClient,
 	wg.Wait()
 }
 
-func (r *RaidInternal) commitRaidResultsForTrainer(trainersClient *clients.TrainersClient, trainerNr int,
+func (r *raidInternal) commitRaidResultsForTrainer(trainersClient *clients.TrainersClient, trainerNr int,
 	trainersWon bool, wg *sync.WaitGroup) {
 	defer wg.Done()
 	log.Infof("Committing battle results from raid")
@@ -318,26 +320,26 @@ func (r *RaidInternal) commitRaidResultsForTrainer(trainersClient *clients.Train
 	defer r.playerBattleStatusLocks[trainerNr].Unlock()
 
 	// Update trainer items, removing the items that were used during the battle
-	if err := RemoveUsedItems(trainersClient, r.playersBattleStatus[trainerNr], r.authTokens[trainerNr],
+	if err := removeUsedItems(trainersClient, r.playersBattleStatus[trainerNr], r.authTokens[trainerNr],
 		r.lobby.TrainerOutChannels[trainerNr]); err != nil {
 		log.Error(err)
 	}
 
 	experienceGain := experience.GetPokemonExperienceGainFromRaid(trainersWon)
-	if err := UpdateTrainerPokemons(trainersClient, r.playersBattleStatus[trainerNr], r.authTokens[trainerNr],
+	if err := updateTrainerPokemons(trainersClient, r.playersBattleStatus[trainerNr], r.authTokens[trainerNr],
 		r.lobby.TrainerOutChannels[trainerNr], experienceGain); err != nil {
 		log.Error(err)
 	}
 
 	// Update trainer stats: add experience
 	experienceGain = experience.GetTrainerExperienceGainFromBattle(trainersWon)
-	if err := AddExperienceToPlayer(trainersClient, r.playersBattleStatus[trainerNr], r.authTokens[trainerNr],
+	if err := addExperienceToPlayer(trainersClient, r.playersBattleStatus[trainerNr], r.authTokens[trainerNr],
 		r.lobby.TrainerOutChannels[trainerNr], experienceGain); err != nil {
 		log.Error(err)
 	}
 }
 
-func RemoveUsedItems(trainersClient *clients.TrainersClient, player *battles.TrainerBattleStatus,
+func removeUsedItems(trainersClient *clients.TrainersClient, player *battles.TrainerBattleStatus,
 	authToken string, outChan chan ws.GenericMsg) error {
 
 	usedItems := player.UsedItems
@@ -368,7 +370,7 @@ func RemoveUsedItems(trainersClient *clients.TrainersClient, player *battles.Tra
 	return nil
 }
 
-func UpdateTrainerPokemons(trainersClient *clients.TrainersClient, player *battles.TrainerBattleStatus,
+func updateTrainerPokemons(trainersClient *clients.TrainersClient, player *battles.TrainerBattleStatus,
 	authToken string, outChan chan ws.GenericMsg, xpAmount float64) error {
 
 	// updates pokemon status after battle: adds XP and updates HP
@@ -403,7 +405,7 @@ func UpdateTrainerPokemons(trainersClient *clients.TrainersClient, player *battl
 	return nil
 }
 
-func AddExperienceToPlayer(trainersClient *clients.TrainersClient, player *battles.TrainerBattleStatus,
+func addExperienceToPlayer(trainersClient *clients.TrainersClient, player *battles.TrainerBattleStatus,
 	authToken string, outChan chan ws.GenericMsg, XPAmount float64) error {
 
 	stats := player.TrainerStats

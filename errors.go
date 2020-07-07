@@ -23,29 +23,29 @@ const (
 )
 
 var (
-	ErrorNotEnoughPokemons = errors.New("not enough pokemons")
-	ErrorTooManyPokemons   = errors.New("too many pokemons")
+	errorNotEnoughPokemons = errors.New("not enough pokemons")
+	errorTooManyPokemons   = errors.New("too many pokemons")
 )
 
-func WrapInit(err error) error {
+func wrapInit(err error) error {
 	return errors.Wrap(err, errorInit)
 }
 
 // Wrappers handlers
 func wrapCreateGymError(err error) error {
-	return errors.Wrap(err, fmt.Sprintf(utils.ErrorInHandlerFormat, CreateGymName))
+	return errors.Wrap(err, fmt.Sprintf(utils.ErrorInHandlerFormat, createGymName))
 }
 
 func wrapCreateRaidError(err error) error {
-	return errors.Wrap(err, fmt.Sprintf(utils.ErrorInHandlerFormat, CreateRaidName))
+	return errors.Wrap(err, fmt.Sprintf(utils.ErrorInHandlerFormat, createRaidName))
 }
 
 func wrapJoinRaidError(err error) error {
-	return errors.Wrap(err, fmt.Sprintf(utils.ErrorInHandlerFormat, JoinRaidName))
+	return errors.Wrap(err, fmt.Sprintf(utils.ErrorInHandlerFormat, joinRaidName))
 }
 
 func wrapGetGymInfoError(err error) error {
-	return errors.Wrap(err, fmt.Sprintf(utils.ErrorInHandlerFormat, GetGymInfoName))
+	return errors.Wrap(err, fmt.Sprintf(utils.ErrorInHandlerFormat, getGymInfoName))
 }
 
 // Wrappers other functions

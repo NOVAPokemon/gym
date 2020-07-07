@@ -44,7 +44,7 @@ var (
 	locationClient      *clients.LocationClient
 	gyms                sync.Map
 	pokemonSpecies      []string
-	config              *GymServerConfig
+	config              *gymServerConfig
 	serverName          string
 	serverNr            int64
 	serviceNameHeadless string
@@ -52,7 +52,7 @@ var (
 
 type gymInternalType struct {
 	Gym  utils.Gym
-	raid *RaidInternal
+	raid *raidInternal
 }
 
 func init() {
@@ -87,14 +87,15 @@ func init() {
 	for i := 0; i < 5; i++ {
 		time.Sleep(time.Duration(5*i) * time.Second)
 
-		gymsLoaded, err := loadGymsFromDBForServer(serverName)
+		var gymsLoaded []utils.GymWithServer
+		gymsLoaded, err = loadGymsFromDBForServer(serverName)
 		if err != nil {
 			log.Warn(err)
 			if serverNr == 0 {
 				// if configs are missing, server 0 adds them
 				err = loadGymsToDb()
 				if err != nil {
-					log.Error(WrapInit(err))
+					log.Error(wrapInit(err))
 					continue
 				}
 
@@ -103,7 +104,7 @@ func init() {
 		} else {
 			err = registerGyms(gymsLoaded)
 			if err != nil {
-				log.Error(WrapInit(err))
+				log.Error(wrapInit(err))
 				continue
 			}
 
@@ -304,7 +305,7 @@ func handleCreateRaid(w http.ResponseWriter, r *http.Request) {
 	}
 
 	trainersClient := clients.NewTrainersClient(httpClient)
-	gymInternal.raid = NewRaid(
+	gymInternal.raid = newRaid(
 		primitive.NewObjectID(),
 		config.MaxTrainersPerRaid,
 		*gymInternal.Gym.RaidBoss,
@@ -384,7 +385,7 @@ func handleJoinRaid(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err = gymInternal.raid.AddPlayer(authToken.Username, pokemonsForBattle, statsToken, trainerItems, conn, r.Header.Get(tokens.AuthTokenHeaderName))
+	_, err = gymInternal.raid.addPlayer(authToken.Username, pokemonsForBattle, statsToken, trainerItems, conn, r.Header.Get(tokens.AuthTokenHeaderName))
 	if err != nil {
 		log.Error(wrapJoinRaidError(err))
 		err = writeErrorMessageAndClose(conn, err)
@@ -397,7 +398,7 @@ func handleJoinRaid(w http.ResponseWriter, r *http.Request) {
 func handleRaidStart(gymId string, gym gymInternalType) {
 	startTimer := time.NewTimer(time.Duration(config.TimeToStartRaid) * time.Millisecond)
 	<-startTimer.C
-	go gym.raid.Start()
+	go gym.raid.start()
 	gym.Gym.RaidForming = false
 	gym.raid = nil
 	gyms.Store(gymId, gym)
@@ -464,11 +465,11 @@ func extractAndVerifyTokensForBattle(trainersClient *clients.TrainersClient, use
 	}
 
 	if len(pokemonTkns) > config.PokemonsPerRaid {
-		return nil, nil, nil, wrapTokensForBattleError(ErrorTooManyPokemons)
+		return nil, nil, nil, wrapTokensForBattleError(errorTooManyPokemons)
 	}
 
 	if len(pokemonTkns) < config.PokemonsPerRaid {
-		return nil, nil, nil, wrapTokensForBattleError(ErrorNotEnoughPokemons)
+		return nil, nil, nil, wrapTokensForBattleError(errorNotEnoughPokemons)
 	}
 
 	pokemonsInToken := make(map[string]*pokemons.Pokemon, len(pokemonTkns))

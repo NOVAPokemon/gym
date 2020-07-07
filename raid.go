@@ -174,7 +174,8 @@ func (r *raidInternal) issueBossMoves() (bool, error) {
 			}
 			r.bossLock.Unlock()
 
-			if ws.GetTrainersJoined(r.lobby) == int(r.failedConnections) {
+			numFailedConnections := int(atomic.LoadInt32(&r.failedConnections))
+			if ws.GetTrainersJoined(r.lobby) == numFailedConnections {
 				return false, errors.New("All trainers left raid")
 			}
 

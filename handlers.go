@@ -377,7 +377,7 @@ func handleJoinRaid(w http.ResponseWriter, r *http.Request) {
 	gymInternal := value.(gymsMapType)
 	if gymInternal.raid == nil {
 		err = newNoRaidInGymError(gymId)
-		log.Error(wrapJoinRaidError(err))
+		log.Warn(wrapJoinRaidError(err))
 
 		err = writeErrorMessageAndClose(conn, err)
 		if err != nil {
@@ -388,7 +388,8 @@ func handleJoinRaid(w http.ResponseWriter, r *http.Request) {
 
 	_, err = gymInternal.raid.addPlayer(authToken.Username, pokemonsForBattle, statsToken, trainerItems, conn, r.Header.Get(tokens.AuthTokenHeaderName))
 	if err != nil {
-		if errors.Cause(err) == websockets.ErrorLobbyIsFull {
+		if errors.Cause(err) == websockets.ErrorLobbyIsFull ||
+			errors.Cause(err) == websockets.ErrorLobbyAlreadyFinished {
 			log.Warn(wrapJoinRaidError(err))
 		} else {
 			log.Error(wrapJoinRaidError(err))

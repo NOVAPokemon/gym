@@ -34,11 +34,11 @@ type raidInternal struct {
 	bossLock                 sync.Mutex
 	trainersListenRoutinesWg sync.WaitGroup
 	raidOver                 chan struct{}
-	commsManager             utils.CommunicationManager
+	commsManager             ws.CommunicationManager
 }
 
 func newRaid(raidId primitive.ObjectID, capacity int, raidBoss pokemons.Pokemon, client *clients.TrainersClient,
-	cooldownMilis int, commsManager utils.CommunicationManager) *raidInternal {
+	cooldownMilis int, commsManager ws.CommunicationManager) *raidInternal {
 	return &raidInternal{
 		failedConnections:        0,
 		lobby:                    ws.NewLobby(raidId, capacity),

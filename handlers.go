@@ -49,7 +49,7 @@ var (
 	serverName          string
 	serverNr            int64
 	serviceNameHeadless string
-	commsManager        utils.CommunicationManager
+	commsManager        websockets.CommunicationManager
 )
 
 type gymInternalType struct {
@@ -549,7 +549,7 @@ func loadPokemonSpecies() ([]string, error) {
 	return pokemonNames, nil
 }
 
-func writeErrorMessageAndClose(conn *websocket.Conn, msgErr error, writer utils.CommunicationManager) error {
+func writeErrorMessageAndClose(conn *websocket.Conn, msgErr error, writer websockets.CommunicationManager) error {
 	msg := websockets.ErrorMessage{
 		Info:  msgErr.Error(),
 		Fatal: false,

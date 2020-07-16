@@ -6,7 +6,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/NOVAPokemon/utils/comms_manager"
 	"github.com/pkg/errors"
 
 	"github.com/NOVAPokemon/utils"
@@ -35,11 +34,11 @@ type raidInternal struct {
 	bossLock                 sync.Mutex
 	trainersListenRoutinesWg sync.WaitGroup
 	raidOver                 chan struct{}
-	commsManager             comms_manager.CommunicationManager
+	commsManager             utils.CommunicationManager
 }
 
 func newRaid(raidId primitive.ObjectID, capacity int, raidBoss pokemons.Pokemon, client *clients.TrainersClient,
-	cooldownMilis int, commsManager comms_manager.CommunicationManager) *raidInternal {
+	cooldownMilis int, commsManager utils.CommunicationManager) *raidInternal {
 	return &raidInternal{
 		failedConnections:        0,
 		lobby:                    ws.NewLobby(raidId, capacity),

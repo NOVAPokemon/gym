@@ -15,7 +15,6 @@ import (
 	"github.com/NOVAPokemon/utils"
 	"github.com/NOVAPokemon/utils/api"
 	"github.com/NOVAPokemon/utils/clients"
-	"github.com/NOVAPokemon/utils/comms_manager"
 	gymDb "github.com/NOVAPokemon/utils/database/gym"
 	"github.com/NOVAPokemon/utils/items"
 	"github.com/NOVAPokemon/utils/pokemons"
@@ -50,7 +49,7 @@ var (
 	serverName          string
 	serverNr            int64
 	serviceNameHeadless string
-	commsManager        comms_manager.CommunicationManager
+	commsManager        utils.CommunicationManager
 )
 
 type gymInternalType struct {
@@ -550,7 +549,7 @@ func loadPokemonSpecies() ([]string, error) {
 	return pokemonNames, nil
 }
 
-func writeErrorMessageAndClose(conn *websocket.Conn, msgErr error, writer comms_manager.CommunicationManager) error {
+func writeErrorMessageAndClose(conn *websocket.Conn, msgErr error, writer utils.CommunicationManager) error {
 	msg := websockets.ErrorMessage{
 		Info:  msgErr.Error(),
 		Fatal: false,

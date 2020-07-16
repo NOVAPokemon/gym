@@ -15,6 +15,7 @@ import (
 	"github.com/NOVAPokemon/utils"
 	"github.com/NOVAPokemon/utils/api"
 	"github.com/NOVAPokemon/utils/clients"
+	"github.com/NOVAPokemon/utils/comms_manager"
 	gymDb "github.com/NOVAPokemon/utils/database/gym"
 	"github.com/NOVAPokemon/utils/items"
 	"github.com/NOVAPokemon/utils/pokemons"
@@ -49,6 +50,7 @@ var (
 	serverName          string
 	serverNr            int64
 	serviceNameHeadless string
+	commsManager        comms_manager.CommunicationManager
 )
 
 type gymInternalType struct {
@@ -66,7 +68,7 @@ func init() {
 	}
 
 	httpClient = &http.Client{}
-	locationClient = clients.NewLocationClient(utils.LocationClientConfig{})
+	locationClient = clients.NewLocationClient(utils.LocationClientConfig{}, commsManager)
 	if pokemonSpecies, err = loadPokemonSpecies(); err != nil {
 		log.Fatal(err)
 	}
@@ -305,13 +307,14 @@ func handleCreateRaid(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	trainersClient := clients.NewTrainersClient(httpClient)
+	trainersClient := clients.NewTrainersClient(httpClient, commsManager)
 	gymInternal.raid = newRaid(
 		primitive.NewObjectID(),
 		config.MaxTrainersPerRaid,
 		*gymInternal.Gym.RaidBoss,
 		trainersClient,
-		config.DefaultCooldown)
+		config.DefaultCooldown,
+		commsManager)
 	gymInternal.Gym.RaidForming = true
 	gyms.Store(gymId, gymInternal)
 	go handleRaidStart(gymId, gymInternal)
@@ -338,7 +341,7 @@ func handleJoinRaid(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Error(wrapJoinRaidError(err))
 
-		err = writeErrorMessageAndClose(conn, err)
+		err = writeErrorMessageAndClose(conn, err, commsManager)
 		if err != nil {
 			log.Error(wrapJoinRaidError(err))
 		}
@@ -346,13 +349,13 @@ func handleJoinRaid(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	trainersClient := clients.NewTrainersClient(httpClient)
+	trainersClient := clients.NewTrainersClient(httpClient, commsManager)
 	trainerItems, statsToken, pokemonsForBattle, err := extractAndVerifyTokensForBattle(trainersClient,
 		authToken.Username, r)
 	if err != nil {
 		log.Error(wrapJoinRaidError(err))
 
-		err = writeErrorMessageAndClose(conn, err)
+		err = writeErrorMessageAndClose(conn, err, commsManager)
 		if err != nil {
 			log.Error(wrapJoinRaidError(err))
 		}
@@ -366,7 +369,7 @@ func handleJoinRaid(w http.ResponseWriter, r *http.Request) {
 		err = newNoGymFoundError(gymId)
 		log.Error(wrapJoinRaidError(err))
 
-		err = writeErrorMessageAndClose(conn, err)
+		err = writeErrorMessageAndClose(conn, err, commsManager)
 		if err != nil {
 			log.Error(wrapJoinRaidError(err))
 		}
@@ -379,7 +382,7 @@ func handleJoinRaid(w http.ResponseWriter, r *http.Request) {
 		err = newNoRaidInGymError(gymId)
 		log.Warn(wrapJoinRaidError(err))
 
-		err = writeErrorMessageAndClose(conn, err)
+		err = writeErrorMessageAndClose(conn, err, commsManager)
 		if err != nil {
 			log.Error(wrapJoinRaidError(err))
 		}
@@ -394,7 +397,7 @@ func handleJoinRaid(w http.ResponseWriter, r *http.Request) {
 		} else {
 			log.Error(wrapJoinRaidError(err))
 		}
-		err = writeErrorMessageAndClose(conn, err)
+		err = writeErrorMessageAndClose(conn, err, commsManager)
 		if err != nil {
 			log.Error(wrapJoinRaidError(err))
 		}
@@ -547,12 +550,13 @@ func loadPokemonSpecies() ([]string, error) {
 	return pokemonNames, nil
 }
 
-func writeErrorMessageAndClose(conn *websocket.Conn, err error) error {
-	data := []byte(websockets.ErrorMessage{
-		Info:  err.Error(),
+func writeErrorMessageAndClose(conn *websocket.Conn, msgErr error, writer comms_manager.CommunicationManager) error {
+	msg := websockets.ErrorMessage{
+		Info:  msgErr.Error(),
 		Fatal: false,
-	}.SerializeToWSMessage().Serialize())
-	err = conn.WriteMessage(websocket.TextMessage, data)
+	}
+
+	err := writer.WriteTextMessageToConn(conn, msg)
 	if err != nil {
 		return websockets.WrapWritingMessageError(err)
 	}

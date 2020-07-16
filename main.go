@@ -30,5 +30,6 @@ func main() {
 		commsManager = utils.CreateDelayedCommunicationManager(utils.DefaultDelayConfigFilename, locationTag)
 	}
 
+	init_handlers()
 	utils.StartServer(serviceName, host, port, routes, commsManager)
 }

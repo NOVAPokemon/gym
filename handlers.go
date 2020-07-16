@@ -67,7 +67,6 @@ func init() {
 	}
 
 	httpClient = &http.Client{}
-	locationClient = clients.NewLocationClient(utils.LocationClientConfig{}, commsManager)
 	if pokemonSpecies, err = loadPokemonSpecies(); err != nil {
 		log.Fatal(err)
 	}
@@ -85,7 +84,12 @@ func init() {
 		log.Fatal(err)
 	}
 	log.Infof("Server name :%s; ServerNr: %d", serverName, serverNr)
+}
 
+func init_handlers() {
+	locationClient = clients.NewLocationClient(utils.LocationClientConfig{}, commsManager)
+
+	var err error
 	for i := 0; i < 5; i++ {
 		time.Sleep(time.Duration(5*i) * time.Second)
 

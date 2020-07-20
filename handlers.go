@@ -101,7 +101,7 @@ func init_handlers() {
 				// if configs are missing, server 0 adds them
 				err = loadGymsToDb()
 				if err != nil {
-					log.Error(wrapInit(err))
+					log.Warn(wrapInit(err))
 					continue
 				}
 

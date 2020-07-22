@@ -87,7 +87,7 @@ func init() {
 }
 
 func init_handlers() {
-	locationClient = clients.NewLocationClient(utils.LocationClientConfig{}, commsManager)
+	locationClient = clients.NewLocationClient(utils.LocationClientConfig{}, "", commsManager)
 
 	var err error
 	for i := 0; i < 5; i++ {

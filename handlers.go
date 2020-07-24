@@ -559,12 +559,7 @@ func writeErrorMessageAndClose(conn *websocket.Conn, msgErr error, writer websoc
 		Fatal: false,
 	}
 
-	serializedMsg := websockets.GenericMsg{
-		MsgType: websocket.TextMessage,
-		Data:    []byte(errMsg.SerializeToWSMessage().Serialize()),
-	}
-
-	err := writer.WriteGenericMessageToConn(conn, serializedMsg)
+	err := writer.WriteGenericMessageToConn(conn, errMsg.ConvertToWSMessage())
 	if err != nil {
 		return websockets.WrapWritingMessageError(err)
 	}

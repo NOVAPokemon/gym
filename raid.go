@@ -86,10 +86,7 @@ func (r *raidInternal) start() {
 	if ws.GetTrainersJoined(r.lobby) > 0 {
 		log.Info("Sending Start message")
 		emitRaidStart()
-		r.sendMsgToAllClients(ws.GenericMsg{
-			MsgType: websocket.TextMessage,
-			Data:    []byte(ws.StartMessage{}.SerializeToWSMessage().Serialize()),
-		})
+		r.sendMsgToAllClients(ws.StartMessage{}.ConvertToWSMessage())
 		trainersWon, err := r.issueBossMoves()
 		if err != nil {
 			log.Error(err)
@@ -109,10 +106,10 @@ func (r *raidInternal) handlePlayerChannel(i int) {
 	defer r.trainersListenRoutinesWg.Done()
 	for {
 		select {
-		case msgStr, ok := <-r.lobby.TrainerInChannels[i]:
+		case wsMsg, ok := <-r.lobby.TrainerInChannels[i]:
 			if ok {
 				r.playerBattleStatusLocks[i].Lock()
-				r.handlePlayerMove(msgStr, r.playersBattleStatus[i], r.lobby.TrainerOutChannels[i])
+				r.handlePlayerMove(wsMsg, r.playersBattleStatus[i], r.lobby.TrainerOutChannels[i])
 				r.playerBattleStatusLocks[i].Unlock()
 			}
 		case <-r.playersBattleStatus[i].CdTimer.C:
@@ -147,10 +144,7 @@ func (r *raidInternal) finish(trainersWon bool) {
 	r.trainersListenRoutinesWg.Wait()
 	log.Info("Done!")
 	r.commitRaidResults(r.trainersClient, trainersWon)
-	r.sendMsgToAllClients(ws.GenericMsg{
-		MsgType: websocket.TextMessage,
-		Data:    []byte(ws.FinishMessage{}.SerializeToWSMessage().Serialize()),
-	})
+	r.sendMsgToAllClients(ws.FinishMessage{}.ConvertToWSMessage())
 	wg := sync.WaitGroup{}
 	for i := 0; i < ws.GetTrainersJoined(r.lobby); i++ {
 		wg.Add(1)
@@ -201,10 +195,11 @@ func (r *raidInternal) issueBossMoves() (bool, error) {
 					default:
 						r.playerBattleStatusLocks[i].Lock()
 						if r.playersBattleStatus[i].SelectedPokemon != nil {
-							change := battles.ApplyAttackMove(r.raidBoss, r.playersBattleStatus[i].SelectedPokemon, r.playersBattleStatus[i].Defending)
+							change := battles.ApplyAttackMove(r.raidBoss, r.playersBattleStatus[i].SelectedPokemon,
+								r.playersBattleStatus[i].Defending)
 							if change {
 								battles.UpdateTrainerPokemon(
-									ws.NewTrackedMessage(primitive.NewObjectID()),
+									nil,
 									*r.playersBattleStatus[i].SelectedPokemon,
 									r.lobby.TrainerOutChannels[i],
 									true)
@@ -235,10 +230,8 @@ func (r *raidInternal) issueBossMoves() (bool, error) {
 				r.bossLock.Lock()
 				r.bossDefending = true
 				r.bossLock.Unlock()
-				r.sendMsgToAllClients(ws.GenericMsg{
-					MsgType: websocket.TextMessage,
-					Data:    []byte(battles.DefendMessage{}.SerializeToWSMessage().Serialize()),
-				})
+				defendMsg := battles.DefendMessage{}
+				r.sendMsgToAllClients(defendMsg.ConvertToWSMessage())
 			}
 		case <-r.lobby.Finished:
 			log.Warn("Routine issuing boss moves exiting unexpectedly...")
@@ -246,7 +239,7 @@ func (r *raidInternal) issueBossMoves() (bool, error) {
 	}
 }
 
-func (r *raidInternal) sendMsgToAllClients(msg ws.GenericMsg) {
+func (r *raidInternal) sendMsgToAllClients(msg *ws.WebsocketMsg) {
 	for i := 0; i < ws.GetTrainersJoined(r.lobby); i++ {
 		select {
 		case <-r.lobby.DoneListeningFromConn[i]:
@@ -256,57 +249,31 @@ func (r *raidInternal) sendMsgToAllClients(msg ws.GenericMsg) {
 	}
 }
 
-func (r *raidInternal) handlePlayerMove(msgStr string, issuer *battles.TrainerBattleStatus,
-	issuerChan chan ws.GenericMsg) {
-	message, err := ws.ParseMessage(msgStr)
-	if err != nil {
-		errMsg := ws.ErrorMessage{
-			Info:  ws.ErrorInvalidMessageFormat.Error(),
-			Fatal: false,
-		}
-		issuerChan <- ws.GenericMsg{
-			MsgType: websocket.TextMessage,
-			Data:    []byte(errMsg.SerializeToWSMessage().Serialize()),
-		}
-		return
-	}
+func (r *raidInternal) handlePlayerMove(wsMsg *ws.WebsocketMsg, issuer *battles.TrainerBattleStatus,
+	issuerChan chan *ws.WebsocketMsg) {
+	trackInfo := wsMsg.Content.RequestTrack
+	msgData := wsMsg.Content.Data
 
-	var desMsg ws.Serializable
-
-	switch message.MsgType {
+	switch wsMsg.Content.AppMsgType {
 	case battles.Attack:
 		r.bossLock.Lock()
-		battles.HandleAttackMove(issuer, issuerChan, r.bossDefending, r.raidBoss, r.cooldown)
+		battles.HandleAttackMove(trackInfo, issuer, issuerChan, r.bossDefending, r.raidBoss, r.cooldown)
 		r.bossLock.Unlock()
 	case battles.Defend:
-		battles.HandleDefendMove(issuer, issuerChan, r.cooldown)
+		battles.HandleDefendMove(trackInfo, issuer, issuerChan, r.cooldown)
 	case battles.UseItem:
-		desMsg, err = battles.DeserializeBattleMsg(message)
-		if err != nil {
-			log.Error(err)
-			return
-		}
-		useItemMsg := desMsg.(*battles.UseItemMessage)
-		battles.HandleUseItem(useItemMsg, issuer, issuerChan, r.cooldown)
+		useItemMsg := msgData.(battles.UseItemMessage)
+		battles.HandleUseItem(trackInfo, &useItemMsg, issuer, issuerChan, r.cooldown)
 	case battles.SelectPokemon:
-		desMsg, err = battles.DeserializeBattleMsg(message)
-		if err != nil {
-			log.Error(err)
-			return
-		}
-
-		selectPokemonMsg := desMsg.(*battles.SelectPokemonMessage)
-		battles.HandleSelectPokemon(selectPokemonMsg, issuer, issuerChan)
+		selectPokemonMsg := msgData.(battles.SelectPokemonMessage)
+		battles.HandleSelectPokemon(trackInfo, &selectPokemonMsg, issuer, issuerChan)
 	default:
-		log.Errorf("cannot handle message type: %s ", message.MsgType)
+		log.Errorf("cannot handle message type: %s ", wsMsg.Content.AppMsgType)
 		msg := ws.ErrorMessage{
 			Info:  ws.ErrorInvalidMessageType.Error(),
 			Fatal: false,
 		}
-		issuerChan <- ws.GenericMsg{
-			MsgType: websocket.TextMessage,
-			Data:    []byte(msg.SerializeToWSMessage().Serialize()),
-		}
+		issuerChan <- msg.ConvertToWSMessageWithInfo(trackInfo)
 	}
 }
 
@@ -355,7 +322,7 @@ func (r *raidInternal) commitRaidResultsForTrainer(trainersClient *clients.Train
 }
 
 func removeUsedItems(trainersClient *clients.TrainersClient, player *battles.TrainerBattleStatus,
-	authToken string, outChan chan ws.GenericMsg) error {
+	authToken string, outChan chan *ws.WebsocketMsg) error {
 
 	usedItems := player.UsedItems
 
@@ -378,16 +345,13 @@ func removeUsedItems(trainersClient *clients.TrainersClient, player *battles.Tra
 		TokenField:   tokens.ItemsTokenHeaderName,
 		TokensString: []string{trainersClient.ItemsToken},
 	}
-	outChan <- ws.GenericMsg{
-		MsgType: websocket.TextMessage,
-		Data:    []byte(setTokensMessage.SerializeToWSMessage().Serialize()),
-	}
+	outChan <- setTokensMessage.ConvertToWSMessage()
 
 	return nil
 }
 
 func updateTrainerPokemons(trainersClient *clients.TrainersClient, player *battles.TrainerBattleStatus,
-	authToken string, outChan chan ws.GenericMsg, xpAmount float64) error {
+	authToken string, outChan chan *ws.WebsocketMsg, xpAmount float64) error {
 
 	// updates pokemon status after battle: adds XP and updates HP
 	// player 0
@@ -413,16 +377,13 @@ func updateTrainerPokemons(trainersClient *clients.TrainersClient, player *battl
 		TokensString: toSend,
 	}
 
-	outChan <- ws.GenericMsg{
-		MsgType: websocket.TextMessage,
-		Data:    []byte(setTokensMessage.SerializeToWSMessage().Serialize()),
-	}
+	outChan <- setTokensMessage.ConvertToWSMessage()
 
 	return nil
 }
 
 func addExperienceToPlayer(trainersClient *clients.TrainersClient, player *battles.TrainerBattleStatus,
-	authToken string, outChan chan ws.GenericMsg, XPAmount float64) error {
+	authToken string, outChan chan *ws.WebsocketMsg, XPAmount float64) error {
 
 	stats := player.TrainerStats
 	stats.XP += XPAmount
@@ -436,10 +397,7 @@ func addExperienceToPlayer(trainersClient *clients.TrainersClient, player *battl
 		TokenField:   tokens.StatsTokenHeaderName,
 		TokensString: []string{trainersClient.TrainerStatsToken},
 	}
-	outChan <- ws.GenericMsg{
-		MsgType: websocket.TextMessage,
-		Data:    []byte(setTokensMessage.SerializeToWSMessage().Serialize()),
-	}
+	outChan <- setTokensMessage.ConvertToWSMessage()
 
 	return nil
 }

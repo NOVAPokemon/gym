@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/mitchellh/mapstructure"
 	"math/rand"
 	"sync"
 	"sync/atomic"
@@ -270,8 +271,13 @@ func (r *raidInternal) handlePlayerMove(wsMsg *ws.WebsocketMsg, issuer *battles.
 		}
 		battles.HandleUseItem(trackInfo, &useItemMsg, issuer, issuerChan, r.cooldown)
 	case battles.SelectPokemon:
-		selectPokemonMsg := msgData.(battles.SelectPokemonMessage)
+		selectPokemonMsg := battles.SelectPokemonMessage{}
+		err := mapstructure.Decode(msgData, &selectPokemonMsg)
+		if err != nil {
+			panic(err)
+		}
 		battles.HandleSelectPokemon(trackInfo, &selectPokemonMsg, issuer, issuerChan)
+
 	default:
 		log.Errorf("cannot handle message type: %s ", wsMsg.Content.AppMsgType)
 		msg := ws.ErrorMessage{

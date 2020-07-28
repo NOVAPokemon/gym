@@ -487,7 +487,7 @@ func extractAndVerifyTokensForBattle(trainersClient *clients.TrainersClient, use
 	pokemonsInToken := make(map[string]*pokemons.Pokemon, len(pokemonTkns))
 	pokemonHashes := make(map[string]string, len(pokemonTkns))
 	for _, pokemonTkn := range pokemonTkns {
-		pokemonId := pokemonTkn.Pokemon.Id.Hex()
+		pokemonId := pokemonTkn.Pokemon.Id
 		pokemonsInToken[pokemonId] = &pokemonTkn.Pokemon
 		pokemonHashes[pokemonId] = pokemonTkn.PokemonHash
 	}

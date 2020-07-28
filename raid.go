@@ -41,7 +41,7 @@ func newRaid(raidId string, capacity int, raidBoss pokemons.Pokemon, client *cli
 	cooldownMilis int, commsManager ws.CommunicationManager) *raidInternal {
 	return &raidInternal{
 		failedConnections:        0,
-		lobby:                    ws.NewLobby(raidId, capacity),
+		lobby:                    ws.NewLobby(raidId, capacity, nil),
 		authTokens:               make([]string, capacity),
 		playersBattleStatus:      make([]*battles.TrainerBattleStatus, capacity),
 		playerBattleStatusLocks:  make([]sync.Mutex, capacity),
@@ -86,7 +86,7 @@ func (r *raidInternal) start() {
 	if ws.GetTrainersJoined(r.lobby) > 0 {
 		log.Info("Sending Start message")
 		emitRaidStart()
-		r.sendMsgToAllClients(ws.StartMessage{}.ConvertToWSMessage())
+		r.sendMsgToAllClients(battles.StartRaidMessage{}.ConvertToWSMessage())
 		trainersWon, err := r.issueBossMoves()
 		if err != nil {
 			log.Error(err)

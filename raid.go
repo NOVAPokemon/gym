@@ -19,7 +19,6 @@ import (
 	"github.com/NOVAPokemon/utils/websockets/battles"
 	"github.com/gorilla/websocket"
 	log "github.com/sirupsen/logrus"
-	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 type raidInternal struct {
@@ -38,7 +37,7 @@ type raidInternal struct {
 	commsManager             ws.CommunicationManager
 }
 
-func newRaid(raidId primitive.ObjectID, capacity int, raidBoss pokemons.Pokemon, client *clients.TrainersClient,
+func newRaid(raidId string, capacity int, raidBoss pokemons.Pokemon, client *clients.TrainersClient,
 	cooldownMilis int, commsManager ws.CommunicationManager) *raidInternal {
 	return &raidInternal{
 		failedConnections:        0,

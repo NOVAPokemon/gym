@@ -312,7 +312,7 @@ func handleCreateRaid(w http.ResponseWriter, r *http.Request) {
 
 	trainersClient := clients.NewTrainersClient(httpClient, commsManager)
 	gymInternal.raid = newRaid(
-		primitive.NewObjectID(),
+		primitive.NewObjectID().Hex(),
 		config.MaxTrainersPerRaid,
 		*gymInternal.Gym.RaidBoss,
 		trainersClient,
@@ -485,7 +485,7 @@ func extractAndVerifyTokensForBattle(trainersClient *clients.TrainersClient, use
 	}
 
 	pokemonsInToken := make(map[string]*pokemons.Pokemon, len(pokemonTkns))
-	pokemonHashes := make(map[string][]byte, len(pokemonTkns))
+	pokemonHashes := make(map[string]string, len(pokemonTkns))
 	for _, pokemonTkn := range pokemonTkns {
 		pokemonId := pokemonTkn.Pokemon.Id.Hex()
 		pokemonsInToken[pokemonId] = &pokemonTkn.Pokemon

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"github.com/mitchellh/mapstructure"
 	"math/rand"
 	"sync"
 	"sync/atomic"

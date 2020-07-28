@@ -6,6 +6,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
 
 	"github.com/NOVAPokemon/utils"
@@ -262,7 +263,11 @@ func (r *raidInternal) handlePlayerMove(wsMsg *ws.WebsocketMsg, issuer *battles.
 	case battles.Defend:
 		battles.HandleDefendMove(trackInfo, issuer, issuerChan, r.cooldown)
 	case battles.UseItem:
-		useItemMsg := msgData.(battles.UseItemMessage)
+		useItemMsg := battles.UseItemMessage{}
+		err := mapstructure.Decode(msgData, &useItemMsg)
+		if err != nil {
+			panic(err)
+		}
 		battles.HandleUseItem(trackInfo, &useItemMsg, issuer, issuerChan, r.cooldown)
 	case battles.SelectPokemon:
 		selectPokemonMsg := msgData.(battles.SelectPokemonMessage)

@@ -278,11 +278,11 @@ func (r *raidInternal) handlePlayerMove(wsMsg *ws.WebsocketMsg, issuer *battles.
 
 	default:
 		log.Errorf("cannot handle message type: %s ", wsMsg.Content.AppMsgType)
-		msg := ws.ErrorMessage{
+		msg := battles.ErrorBattleMessage{
 			Info:  ws.ErrorInvalidMessageType.Error(),
 			Fatal: false,
 		}
-		issuerChan <- msg.ConvertToWSMessageWithInfo(trackInfo)
+		issuerChan <- msg.ConvertToWSMessage(*trackInfo)
 	}
 }
 

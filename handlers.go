@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"io/ioutil"
 	"math/rand"
-	http "github.com/bruno-anjos/archimedesHTTPClient"
-	originalHttp "net/http"
 	"os"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	http "github.com/bruno-anjos/archimedesHTTPClient"
 
 	"github.com/NOVAPokemon/utils"
 	"github.com/NOVAPokemon/utils/api"
@@ -243,7 +243,7 @@ func registerGyms(gymsWithSrv []utils.GymWithServer) error {
 	return nil
 }
 
-func handleCreateGym(w originalHttp.ResponseWriter, r *originalHttp.Request) {
+func handleCreateGym(w http.ResponseWriter, r *http.Request) {
 	var gym = utils.Gym{}
 
 	err := json.NewDecoder(r.Body).Decode(&gym)
@@ -283,7 +283,7 @@ func handleCreateGym(w originalHttp.ResponseWriter, r *originalHttp.Request) {
 	}
 }
 
-func handleCreateRaid(w originalHttp.ResponseWriter, r *originalHttp.Request) {
+func handleCreateRaid(w http.ResponseWriter, r *http.Request) {
 	var gymId = mux.Vars(r)[api.GymIdPathVar]
 
 	value, ok := gyms.Load(gymId)
@@ -325,8 +325,8 @@ func handleCreateRaid(w originalHttp.ResponseWriter, r *originalHttp.Request) {
 	log.Info("Created new raid")
 }
 
-func handleJoinRaid(w originalHttp.ResponseWriter, r *originalHttp.Request) {
-	responseHeader := originalHttp.Header{}
+func handleJoinRaid(w http.ResponseWriter, r *http.Request) {
+	responseHeader := http.Header{}
 	conn, err := upgrader.Upgrade(w, r, responseHeader)
 	if err != nil {
 		err = websockets.WrapUpgradeConnectionError(err)
@@ -417,7 +417,7 @@ func handleRaidStart(gymId string, gym gymInternalType) {
 	gyms.Store(gymId, gym)
 }
 
-func handleGetGymInfo(w originalHttp.ResponseWriter, r *originalHttp.Request) {
+func handleGetGymInfo(w http.ResponseWriter, r *http.Request) {
 	var gymId = mux.Vars(r)[api.GymIdPathVar]
 
 	value, ok := gyms.Load(gymId)
@@ -471,7 +471,7 @@ func refreshRaidBossPeriodic(gymName string) {
 }
 
 func extractAndVerifyTokensForBattle(trainersClient *clients.TrainersClient, username string,
-	r *originalHttp.Request) (map[string]items.Item, *utils.TrainerStats, map[string]*pokemons.Pokemon, error) {
+	r *http.Request) (map[string]items.Item, *utils.TrainerStats, map[string]*pokemons.Pokemon, error) {
 	pokemonTkns, err := tokens.ExtractAndVerifyPokemonTokens(r.Header)
 	if err != nil {
 		return nil, nil, nil, wrapTokensForBattleError(err)

@@ -37,9 +37,11 @@ type (
 	gymsMapType = gymInternalType
 )
 
-// pokemonsFile taken from https://raw.githubusercontent.com/sindresorhus/pokemon/master/data/en.json
-const pokemonsFile = "pokemons.json"
-const configFilename = "configs.json"
+const (
+	// pokemonsFile taken from https://raw.githubusercontent.com/sindresorhus/pokemon/master/data/en.json
+	pokemonsFile   = "pokemons.json"
+	configFilename = "configs.json"
+)
 
 var (
 	httpClient          *http.Client
@@ -71,6 +73,7 @@ func init() {
 	if pokemonSpecies, err = loadPokemonSpecies(); err != nil {
 		log.Fatal(err)
 	}
+	
 	if err = loadConfig(); err != nil {
 		log.Fatal(err)
 	}

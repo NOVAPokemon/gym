@@ -2,6 +2,7 @@ package main
 
 import (
 	"github.com/NOVAPokemon/utils"
+	gymDb "github.com/NOVAPokemon/utils/database/gym"
 	"github.com/gorilla/websocket"
 )
 
@@ -30,6 +31,7 @@ func main() {
 		commsManager = utils.CreateDefaultDelayedManager(locationTag, false)
 	}
 
+	gymDb.InitGymDBClient(*flags.ArchimedesEnabled)
 	init_handlers()
 	utils.StartServer(serviceName, host, port, routes, commsManager)
 }

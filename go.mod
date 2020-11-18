@@ -14,6 +14,5 @@ require (
 
 replace (
 	github.com/NOVAPokemon/utils v0.0.62 => ../utils
-	github.com/bruno-anjos/archimedes v0.0.2 => ./../../bruno-anjos/archimedes
 	github.com/bruno-anjos/archimedesHTTPClient v0.0.2 => ./../../bruno-anjos/archimedesHTTPClient
 )

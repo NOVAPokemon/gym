@@ -69,7 +69,6 @@ func init() {
 		log.Fatal("Could not load headless service name")
 	}
 
-	httpClient = &http.Client{}
 	if pokemonSpecies, err = loadPokemonSpecies(); err != nil {
 		log.Fatal(err)
 	}
@@ -90,8 +89,16 @@ func init() {
 	log.Infof("Server name :%s; ServerNr: %d", serverName, serverNr)
 }
 
-func init_handlers() {
-	locationClient = clients.NewLocationClient(utils.LocationClientConfig{}, "", commsManager)
+func initHandlers() {
+	location, exists := os.LookupEnv("LOCATION")
+	if !exists {
+		log.Errorf("no environment variable for location")
+	}
+
+	httpClient = &http.Client{}
+	httpClient.InitArchimedesClient("localhost", http.DefaultArchimedesPort, s2.CellIDFromToken(location).LatLng())
+
+	locationClient = clients.NewLocationClient(utils.LocationClientConfig{}, "", commsManager, httpClient)
 
 	var err error
 	for i := 0; i < 5; i++ {

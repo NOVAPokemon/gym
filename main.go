@@ -32,6 +32,6 @@ func main() {
 	}
 
 	gymDb.InitGymDBClient(*flags.ArchimedesEnabled)
-	init_handlers()
+	initHandlers()
 	utils.StartServer(serviceName, host, port, routes, commsManager)
 }

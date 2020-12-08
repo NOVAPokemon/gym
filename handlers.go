@@ -11,8 +11,6 @@ import (
 	"sync"
 	"time"
 
-	http "github.com/bruno-anjos/archimedesHTTPClient"
-
 	"github.com/NOVAPokemon/utils"
 	"github.com/NOVAPokemon/utils/api"
 	"github.com/NOVAPokemon/utils/clients"
@@ -21,6 +19,7 @@ import (
 	"github.com/NOVAPokemon/utils/pokemons"
 	"github.com/NOVAPokemon/utils/tokens"
 	"github.com/NOVAPokemon/utils/websockets"
+	http "github.com/bruno-anjos/archimedesHTTPClient"
 	"github.com/golang/geo/s2"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
@@ -44,7 +43,7 @@ const (
 )
 
 var (
-	httpClient          *http.Client
+	httpClient          = &http.Client{}
 	locationClient      *clients.LocationClient
 	gyms                sync.Map
 	pokemonSpecies      []string
@@ -72,7 +71,7 @@ func init() {
 	if pokemonSpecies, err = loadPokemonSpecies(); err != nil {
 		log.Fatal(err)
 	}
-	
+
 	if err = loadConfig(); err != nil {
 		log.Fatal(err)
 	}
@@ -82,27 +81,22 @@ func init() {
 	} else {
 		log.Fatal("Could not load server name")
 	}
+
 	split := strings.Split(serverName, "-")
 	if serverNr, err = strconv.ParseInt(split[len(split)-1], 10, 32); err != nil {
 		log.Fatal(err)
 	}
-	log.Infof("Server name :%s; ServerNr: %d", serverName, serverNr)
+
+	log.Infof("Server name: %s; ServerNr: %d", serverName, serverNr)
 }
 
 func initHandlers() {
-	location, exists := os.LookupEnv("LOCATION")
-	if !exists {
-		log.Errorf("no environment variable for location")
-	}
-
-	httpClient = &http.Client{}
-	httpClient.InitArchimedesClient("localhost", http.DefaultArchimedesPort, s2.CellIDFromToken(location).LatLng())
-
 	locationClient = clients.NewLocationClient(utils.LocationClientConfig{}, "", commsManager, httpClient)
 
 	var err error
 	for i := 0; i < 5; i++ {
-		time.Sleep(time.Duration(5*i) * time.Second)
+		waitTime := 5 * i
+		time.Sleep(time.Duration(waitTime) * time.Second)
 
 		var gymsLoaded []utils.GymWithServer
 		gymsLoaded, err = loadGymsFromDBForServer(serverName)

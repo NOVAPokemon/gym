@@ -20,6 +20,7 @@ import (
 	"github.com/NOVAPokemon/utils/tokens"
 	"github.com/NOVAPokemon/utils/websockets"
 	http "github.com/bruno-anjos/archimedesHTTPClient"
+	cedUtils "github.com/bruno-anjos/cloud-edge-deployment/pkg/utils"
 	"github.com/golang/geo/s2"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
@@ -43,15 +44,17 @@ const (
 )
 
 var (
-	httpClient          = &http.Client{}
-	locationClient      *clients.LocationClient
-	gyms                sync.Map
-	pokemonSpecies      []string
-	config              *gymServerConfig
-	serverName          string
-	serverNr            int64
-	serviceNameHeadless string
-	commsManager        websockets.CommunicationManager
+	httpClient     = &http.Client{}
+	locationClient *clients.LocationClient
+	gyms           sync.Map
+	pokemonSpecies []string
+	config         *gymServerConfig
+
+	serverName   string
+	instanceName string
+
+	serverNr     int64
+	commsManager websockets.CommunicationManager
 )
 
 type gymInternalType struct {
@@ -62,10 +65,16 @@ type gymInternalType struct {
 func init() {
 	var err error
 
-	if aux, exists := os.LookupEnv(utils.HeadlessServiceNameEnvVar); exists {
-		serviceNameHeadless = aux
+	if aux, exists := os.LookupEnv(utils.HostnameEnvVar); exists {
+		serverName = aux
 	} else {
-		log.Fatal("Could not load headless service name")
+		log.Fatal("Could not load server name")
+	}
+
+	if aux, exists := os.LookupEnv(cedUtils.InstanceEnvVarName); exists {
+		instanceName = aux
+	} else {
+		log.Fatal("Could not load instance name")
 	}
 
 	if pokemonSpecies, err = loadPokemonSpecies(); err != nil {
@@ -74,12 +83,6 @@ func init() {
 
 	if err = loadConfig(); err != nil {
 		log.Fatal(err)
-	}
-
-	if aux, exists := os.LookupEnv(utils.HostnameEnvVar); exists {
-		serverName = aux
-	} else {
-		log.Fatal("Could not load server name")
 	}
 
 	split := strings.Split(serverName, "-")
@@ -231,7 +234,7 @@ func loadGymsFromDBForServer(serverName string) ([]utils.GymWithServer, error) {
 func registerGyms(gymsWithSrv []utils.GymWithServer) error {
 	for _, gymWithSrv := range gymsWithSrv {
 		gymWithServer := utils.GymWithServer{
-			ServerName: fmt.Sprintf("%s.%s", gymWithSrv.ServerName, serviceNameHeadless),
+			ServerName: gymWithSrv.ServerName,
 			Gym:        gymWithSrv.Gym,
 		}
 
@@ -264,7 +267,7 @@ func handleCreateGym(w http.ResponseWriter, r *http.Request) {
 	go refreshRaidBossPeriodic(gym.Name)
 
 	gymWithServer := utils.GymWithServer{
-		ServerName: fmt.Sprintf("%s.%s", serverName, serviceNameHeadless),
+		ServerName: instanceName,
 		Gym:        gym,
 	}
 

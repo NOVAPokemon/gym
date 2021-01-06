@@ -27,6 +27,7 @@ import (
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	originalHTTP "net/http"
 )
 
 const (
@@ -44,7 +45,7 @@ const (
 )
 
 var (
-	httpClient     = &http.Client{}
+	httpClient     = &http.Client{Client: originalHTTP.Client{Timeout: clients.RequestTimeout}}
 	locationClient *clients.LocationClient
 	gyms           sync.Map
 	pokemonSpecies []string
@@ -94,7 +95,7 @@ func init() {
 }
 
 func initHandlers() {
-	locationClient = clients.NewLocationClient(utils.LocationClientConfig{}, "", commsManager, httpClient)
+	locationClient = clients.NewLocationClient(utils.LocationClientConfig{}, "", commsManager, "", httpClient)
 
 	var err error
 	for i := 0; i < 5; i++ {
@@ -166,6 +167,7 @@ func loadGymsToDb() (err error) {
 		Latitude  float64
 		Longitude float64
 	}
+
 	var files []os.FileInfo
 	if files, err = ioutil.ReadDir(gymConfigsFolder); err != nil {
 		return wrapLoadGymsToDBError(err)
@@ -175,7 +177,9 @@ func loadGymsToDb() (err error) {
 		if !strings.Contains(file.Name(), ".json") {
 			continue
 		}
+
 		log.Infof("Doing file: %s", file.Name())
+
 		var fileData []byte
 		if fileData, err = ioutil.ReadFile(fmt.Sprintf("%s/%s", gymConfigsFolder, file.Name())); err != nil {
 			return wrapLoadGymsToDBError(err)
@@ -251,7 +255,7 @@ func registerGyms(gymsWithSrv []utils.GymWithServer) error {
 }
 
 func handleCreateGym(w http.ResponseWriter, r *http.Request) {
-	var gym = utils.Gym{}
+	gym := utils.Gym{}
 
 	err := json.NewDecoder(r.Body).Decode(&gym)
 	if err != nil {
@@ -291,7 +295,7 @@ func handleCreateGym(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleCreateRaid(w http.ResponseWriter, r *http.Request) {
-	var gymId = mux.Vars(r)[api.GymIdPathVar]
+	gymId := mux.Vars(r)[api.GymIdPathVar]
 
 	value, ok := gyms.Load(gymId)
 	if !ok {
@@ -374,7 +378,7 @@ func handleJoinRaid(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var gymId = mux.Vars(r)[api.GymIdPathVar]
+	gymId := mux.Vars(r)[api.GymIdPathVar]
 	value, ok := gyms.Load(gymId)
 	if !ok {
 		err = newNoGymFoundError(gymId)
@@ -425,7 +429,7 @@ func handleRaidStart(gymId string, gym gymInternalType) {
 }
 
 func handleGetGymInfo(w http.ResponseWriter, r *http.Request) {
-	var gymId = mux.Vars(r)[api.GymIdPathVar]
+	gymId := mux.Vars(r)[api.GymIdPathVar]
 
 	value, ok := gyms.Load(gymId)
 	if !ok {

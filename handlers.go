@@ -95,7 +95,8 @@ func init() {
 }
 
 func initHandlers() {
-	locationClient = clients.NewLocationClient(utils.LocationClientConfig{}, "", commsManager, "", httpClient)
+	var emptyCellID s2.CellID
+	locationClient = clients.NewLocationClient(utils.LocationClientConfig{}, emptyCellID, commsManager, "", httpClient)
 
 	var err error
 	for i := 0; i < 5; i++ {
@@ -404,7 +405,8 @@ func handleJoinRaid(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err = gymInternal.raid.addPlayer(authToken.Username, pokemonsForBattle, statsToken, trainerItems, conn, r.Header.Get(tokens.AuthTokenHeaderName))
+	_, err = gymInternal.raid.addPlayer(authToken.Username, pokemonsForBattle, statsToken, trainerItems, conn,
+		r.Header.Get(tokens.AuthTokenHeaderName))
 	if err != nil {
 		if errors.Cause(err) == websockets.ErrorLobbyIsFull ||
 			errors.Cause(err) == websockets.ErrorLobbyAlreadyFinished {

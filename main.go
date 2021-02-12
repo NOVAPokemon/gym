@@ -30,15 +30,19 @@ func main() {
 		utils.SetLogFile(serverName)
 	}
 
-	if !*flags.DelayedComms {
-		commsManager = utils.CreateDefaultCommunicationManager()
-	} else {
-		commsManager = utils.CreateDefaultDelayedManager(false)
-	}
-
 	location, exists := os.LookupEnv("LOCATION")
 	if !exists {
 		log.Fatal("no location in environment")
+	}
+
+	cellID := s2.CellIDFromToken(location)
+
+	if !*flags.DelayedComms {
+		commsManager = utils.CreateDefaultCommunicationManager()
+	} else {
+		commsManager = utils.CreateDefaultDelayedManager(false, &utils.OptionalConfigs{
+			CellID: cellID,
+		})
 	}
 
 	var node string

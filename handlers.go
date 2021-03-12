@@ -37,11 +37,13 @@ type (
 )
 
 // pokemonsFile taken from https://raw.githubusercontent.com/sindresorhus/pokemon/master/data/en.json
-const pokemonsFile = "pokemons.json"
-const configFilename = "configs.json"
+const (
+	pokemonsFile   = "pokemons.json"
+	configFilename = "configs.json"
+)
 
 var (
-	httpClient          *http.Client
+	httpClient          = &http.Client{Timeout: clients.RequestTimeout}
 	locationClient      *clients.LocationClient
 	gyms                sync.Map
 	pokemonSpecies      []string
@@ -86,12 +88,13 @@ func init() {
 	log.Infof("Server name :%s; ServerNr: %d", serverName, serverNr)
 }
 
-func init_handlers() {
-	locationClient = clients.NewLocationClient(utils.LocationClientConfig{}, "", commsManager)
+func initHandlers() {
+	locationClient = clients.NewLocationClient(utils.LocationClientConfig{}, "", commsManager, httpClient)
 
 	var err error
 	for i := 0; i < 5; i++ {
-		time.Sleep(time.Duration(5*i) * time.Second)
+		waitTime := 5 * i
+		time.Sleep(time.Duration(waitTime) * time.Second)
 
 		var gymsLoaded []utils.GymWithServer
 		gymsLoaded, err = loadGymsFromDBForServer(serverName)
@@ -243,7 +246,7 @@ func registerGyms(gymsWithSrv []utils.GymWithServer) error {
 }
 
 func handleCreateGym(w http.ResponseWriter, r *http.Request) {
-	var gym = utils.Gym{}
+	gym := utils.Gym{}
 
 	err := json.NewDecoder(r.Body).Decode(&gym)
 	if err != nil {
@@ -283,7 +286,7 @@ func handleCreateGym(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleCreateRaid(w http.ResponseWriter, r *http.Request) {
-	var gymId = mux.Vars(r)[api.GymIdPathVar]
+	gymId := mux.Vars(r)[api.GymIdPathVar]
 
 	value, ok := gyms.Load(gymId)
 	if !ok {
@@ -366,7 +369,7 @@ func handleJoinRaid(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var gymId = mux.Vars(r)[api.GymIdPathVar]
+	gymId := mux.Vars(r)[api.GymIdPathVar]
 	value, ok := gyms.Load(gymId)
 	if !ok {
 		err = newNoGymFoundError(gymId)
@@ -417,7 +420,7 @@ func handleRaidStart(gymId string, gym gymInternalType) {
 }
 
 func handleGetGymInfo(w http.ResponseWriter, r *http.Request) {
-	var gymId = mux.Vars(r)[api.GymIdPathVar]
+	gymId := mux.Vars(r)[api.GymIdPathVar]
 
 	value, ok := gyms.Load(gymId)
 	if !ok {

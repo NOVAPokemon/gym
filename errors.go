@@ -31,7 +31,7 @@ func wrapInit(err error) error {
 	return errors.Wrap(err, errorInit)
 }
 
-// Wrappers handlers
+// Wrappers handlers.
 func wrapCreateGymError(err error) error {
 	return errors.Wrap(err, fmt.Sprintf(utils.ErrorInHandlerFormat, createGymName))
 }
@@ -48,7 +48,7 @@ func wrapGetGymInfoError(err error) error {
 	return errors.Wrap(err, fmt.Sprintf(utils.ErrorInHandlerFormat, getGymInfoName))
 }
 
-// Wrappers other functions
+// Wrappers other functions.
 func wrapLoadGymsFromDBError(err error) error {
 	return errors.Wrap(err, errorLoadingGymsFromDB)
 }
@@ -71,22 +71,22 @@ func wrapRaidAddPlayerError(err error) error {
 
 // Errors builders
 
-func newGymNoRaidBossError(gymId string) error {
-	return errors.New(fmt.Sprintf(errorGymNoRaidBossFormat, gymId))
+func newGymNoRaidBossError(gymID string) error {
+	return fmt.Errorf(errorGymNoRaidBossFormat, gymID)
 }
 
-func newRaidAlreadyExistsError(gymId string) error {
-	return errors.New(fmt.Sprintf(errorRaidAlreadExistsFormat, gymId))
+func newRaidAlreadyExistsError(gymID string) error {
+	return fmt.Errorf(errorRaidAlreadExistsFormat, gymID)
 }
 
-func newRaidBossDeadError(gymId string) error {
-	return errors.New(fmt.Sprintf(errorRaidBossDeadFormat, gymId))
+func newRaidBossDeadError(gymID string) error {
+	return fmt.Errorf(errorRaidBossDeadFormat, gymID)
 }
 
-func newNoGymFoundError(gymId string) error {
-	return errors.New(fmt.Sprintf(errorNoGymFoundFormat, gymId))
+func newNoGymFoundError(gymID string) error {
+	return fmt.Errorf(errorNoGymFoundFormat, gymID)
 }
 
-func newNoRaidInGymError(gymId string) error {
-	return errors.New(fmt.Sprintf(errorNoRaidInGymFormat, gymId))
+func newNoRaidInGymError(gymID string) error {
+	return fmt.Errorf(errorNoRaidInGymFormat, gymID)
 }

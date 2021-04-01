@@ -296,7 +296,7 @@ func (r *raidInternal) commitRaidResults(trainersClient *clients.TrainersClient,
 		default:
 			wg.Add(1)
 			trainerNr := i
-			tempClient := clients.NewTrainersClient(trainersClient.HttpClient, commsManager)
+			tempClient := clients.NewTrainersClient(trainersClient.HttpClient, commsManager, basicClient)
 			go r.commitRaidResultsForTrainer(tempClient, trainerNr, playersWon, &wg)
 		}
 	}

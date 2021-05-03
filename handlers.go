@@ -11,6 +11,8 @@ import (
 	"sync"
 	"time"
 
+	originalHTTP "net/http"
+
 	"github.com/NOVAPokemon/utils"
 	"github.com/NOVAPokemon/utils/api"
 	"github.com/NOVAPokemon/utils/clients"
@@ -27,7 +29,6 @@ import (
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"go.mongodb.org/mongo-driver/bson/primitive"
-	originalHTTP "net/http"
 )
 
 const (
@@ -45,7 +46,12 @@ const (
 )
 
 var (
-	httpClient     = &http.Client{Client: originalHTTP.Client{Timeout: clients.RequestTimeout}}
+	httpClient = &http.Client{
+		Client: originalHTTP.Client{
+			Timeout:   clients.RequestTimeout,
+			Transport: clients.NewTransport(),
+		},
+	}
 	locationClient *clients.LocationClient
 	gyms           sync.Map
 	pokemonSpecies []string

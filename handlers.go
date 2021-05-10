@@ -45,10 +45,8 @@ const (
 
 var (
 	httpClient = &http.Client{
-		Client: originalHTTP.Client{
-			Timeout:   clients.RequestTimeout,
-			Transport: clients.NewTransport(),
-		},
+		Timeout:   utils.Timeout,
+		Transport: clients.NewTransport(),
 	}
 	basicClient = clients.NewBasicClient(false, "")
 
